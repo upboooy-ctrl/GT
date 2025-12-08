@@ -1,0 +1,183 @@
+import React, { useState } from 'react';
+import { UploadSection } from './components/UploadSection';
+import { VersusScreen } from './components/VersusScreen';
+import { GameCanvas } from './components/GameCanvas';
+import { analyzeFighters } from './services/geminiService';
+import { AppState, FighterData, GameResult, PowerUpType, SpecialId } from './types';
+import { Button } from './components/Button';
+
+const App: React.FC = () => {
+  const [appState, setAppState] = useState<AppState>(AppState.UPLOAD);
+  const [p1Data, setP1Data] = useState<FighterData | null>(null);
+  const [p2Data, setP2Data] = useState<FighterData | null>(null);
+  const [customBullet, setCustomBullet] = useState<string | null>(null);
+  const [gameResult, setGameResult] = useState<GameResult | null>(null);
+  const [loadingText, setLoadingText] = useState("Summoning the spirits...");
+  const [gameId, setGameId] = useState(0); 
+  const [aimMode, setAimMode] = useState<'MANUAL' | 'AUTO'>('MANUAL');
+  const [allowedPowerUps, setAllowedPowerUps] = useState<PowerUpType[]>([]);
+  const [bulletVelocity, setBulletVelocity] = useState(12);
+
+  const handleImagesReady = async (
+    img1: string, 
+    img2: string, 
+    bulletImg: string | null, 
+    p1Special: string, 
+    p2Special: string,
+    p1SpecialId: SpecialId,
+    p2SpecialId: SpecialId,
+    p1Name: string,
+    p2Name: string,
+    mode: 'MANUAL' | 'AUTO',
+    initialHp: number,
+    powerUps: PowerUpType[],
+    velocity: number
+  ) => {
+    setAppState(AppState.ANALYZING);
+    setLoadingText("Consulting the Gemini Oracle...");
+    setCustomBullet(bulletImg);
+    setAimMode(mode);
+    setAllowedPowerUps(powerUps);
+    setBulletVelocity(velocity);
+    
+    try {
+      const stats = await analyzeFighters(img1, img2);
+      
+      // Override data with user input if provided
+      if (p1Special) stats.player1.specialMove = p1Special;
+      if (p2Special) stats.player2.specialMove = p2Special;
+      if (p1Name) stats.player1.name = p1Name;
+      if (p2Name) stats.player2.name = p2Name;
+
+      // Force Selected HP
+      stats.player1.hp = initialHp;
+      stats.player2.hp = initialHp;
+
+      setP1Data({
+        id: 'player1',
+        imageSrc: img1,
+        stats: stats.player1,
+        specialId: p1SpecialId
+      });
+      
+      setP2Data({
+        id: 'player2',
+        imageSrc: img2,
+        stats: stats.player2,
+        specialId: p2SpecialId
+      });
+
+      setAppState(AppState.VERSUS);
+    } catch (e) {
+      console.error(e);
+      setAppState(AppState.UPLOAD);
+      alert("The ritual failed (API Error). Try again.");
+    }
+  };
+
+  const handleStartGame = () => {
+    setAppState(AppState.PLAYING);
+  };
+
+  const handleGameOver = (result: GameResult) => {
+    setGameResult(result);
+    setAppState(AppState.GAME_OVER);
+  };
+
+  const handleReset = () => {
+    setAppState(AppState.UPLOAD);
+    setP1Data(null);
+    setP2Data(null);
+    setCustomBullet(null);
+    setGameResult(null);
+    setGameId(0);
+  };
+
+  const handleRematch = () => {
+    setGameId(prev => prev + 1); 
+    setGameResult(null);
+    setAppState(AppState.PLAYING);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#09090b] text-slate-100 font-sans selection:bg-purple-500 selection:text-white">
+      {/* Header */}
+      <header className="fixed top-0 w-full p-4 flex justify-between items-center z-50 pointer-events-none">
+        <h1 className="text-xl font-bold font-cinzel text-white/80 tracking-widest pointer-events-auto shadow-black drop-shadow-md">
+          LEGENDS <span className="text-purple-500">OF</span> GT
+        </h1>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col items-center justify-center min-h-screen">
+        
+        {appState === AppState.UPLOAD && (
+          <UploadSection onImagesReady={handleImagesReady} />
+        )}
+
+        {appState === AppState.ANALYZING && (
+          <div className="flex flex-col items-center justify-center space-y-8 animate-pulse">
+            <div className="w-24 h-24 border-4 border-t-purple-500 border-r-indigo-500 border-b-purple-900 border-l-indigo-900 rounded-full animate-spin"></div>
+            <p className="text-2xl font-cinzel text-purple-200">{loadingText}</p>
+          </div>
+        )}
+
+        {appState === AppState.VERSUS && p1Data && p2Data && (
+          <VersusScreen p1={p1Data} p2={p2Data} onStartGame={handleStartGame} />
+        )}
+
+        {appState === AppState.PLAYING && p1Data && p2Data && (
+          <GameCanvas 
+            key={gameId} 
+            p1={p1Data} 
+            p2={p2Data} 
+            customBullet={customBullet}
+            onGameOver={handleGameOver} 
+            aimMode={aimMode}
+            allowedPowerUps={allowedPowerUps}
+            bulletVelocity={bulletVelocity}
+          />
+        )}
+
+        {appState === AppState.GAME_OVER && gameResult && (
+          <div className="flex flex-col items-center justify-center text-center p-8 animate-fade-in bg-slate-900/90 border border-slate-700 rounded-2xl shadow-2xl max-w-2xl mx-4 z-10">
+            <h2 className="text-6xl font-black font-cinzel text-white mb-4 drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]">
+              {gameResult.winner ? "VICTORY" : "DRAW"}
+            </h2>
+            
+            <p className="text-3xl font-bold text-red-500 font-cinzel mb-4 tracking-wider uppercase drop-shadow-md">
+                GT Ki Maa Kunal
+            </p>
+
+            <p className="text-xl text-purple-300 mb-8">{gameResult.message}</p>
+            
+            {gameResult.winner && (
+               <div className="mb-8 relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-indigo-500 blur-xl opacity-50 rounded-full"></div>
+                  <img 
+                    src={gameResult.winner.imageSrc} 
+                    alt="Winner" 
+                    className="w-40 h-40 object-cover rounded-full border-4 border-yellow-400 relative z-10 shadow-2xl" 
+                  />
+                  <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-yellow-500 text-black font-bold px-4 py-1 rounded-full text-xs uppercase z-20 whitespace-nowrap">
+                    The Legend
+                  </div>
+               </div>
+            )}
+
+            <div className="flex gap-4">
+                <Button onClick={handleRematch} className="bg-gradient-to-r from-green-600 to-emerald-600 border-green-400/30 shadow-[0_0_20px_rgba(34,197,94,0.4)]">
+                    Rematch
+                </Button>
+                <Button onClick={handleReset} variant="secondary">
+                    New Battle
+                </Button>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
+
+export default App;
