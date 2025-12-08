@@ -114,7 +114,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     blackHoles: [] as BlackHole[],
     texts: [] as FloatingText[],
     keys: { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, KeyW: false, KeyS: false, KeyA: false, KeyD: false, Space: false, KeyE: false },
-    mouse: { x: 0, y: 0 },
+    mouse: { x: 400, y: 300 }, // Default center to avoid NaN on initial frame
     time: 0,
     deathTimer: 0,
     gameEnded: false,
@@ -126,9 +126,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
   const playSound = (type: 'shoot' | 'hit' | 'special' | 'powerup' | 'freeze' | 'gameover' | 'void' | 'shield' | 'lovely') => {
     try {
         if (!audioCtxRef.current) {
-            audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
+            if (AudioContextClass) {
+                audioCtxRef.current = new AudioContextClass();
+            }
         }
         const ctx = audioCtxRef.current;
+        if (!ctx) return;
+        
         if (ctx.state === 'suspended') {
             ctx.resume().catch(() => {});
         }
@@ -274,17 +279,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         
         // Accurate Mouse Mapping for Scaled Canvas
         const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
+        
+        // Prevent division by zero / NaN logic
+        if (rect.width > 0 && rect.height > 0) {
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
 
-        gameState.current.mouse.x = (e.clientX - rect.left) * scaleX;
-        gameState.current.mouse.y = (e.clientY - rect.top) * scaleY;
+            gameState.current.mouse.x = (e.clientX - rect.left) * scaleX;
+            gameState.current.mouse.y = (e.clientY - rect.top) * scaleY;
+        }
     };
     
     const initAudio = () => {
          try {
             if (!audioCtxRef.current) {
-                audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
+                if (AudioContextClass) {
+                    audioCtxRef.current = new AudioContextClass();
+                }
             }
          } catch(e) {}
     };
@@ -388,10 +400,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
          default:
             playSound('special');
              // Aiming Logic
-             let angle;
+             let angle = 0;
              if (isP1) {
                  if (aimMode === 'MANUAL') {
-                     angle = Math.atan2(gameState.current.mouse.y - char.y, gameState.current.mouse.x - char.x);
+                     // Safety check for aiming coordinates
+                     const dx = gameState.current.mouse.x - char.x;
+                     const dy = gameState.current.mouse.y - char.y;
+                     angle = Math.atan2(dy || 0, dx || 1); // fallback to prevent NaN
                  } else {
                      const target = gameState.current.p2;
                      angle = Math.atan2(target.y - char.y, target.x - char.x);
@@ -420,324 +435,335 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
   };
 
   const animate = (timestamp: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    try {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
-    // Use clearRect instead of resizing canvas to avoid context reset issues
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Use clearRect instead of resizing canvas to avoid context reset issues
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const state = gameState.current;
+        const state = gameState.current;
 
-    // Paused State
-    if (isPausedRef.current) {
-        draw(ctx, canvas);
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '900 60px Cinzel';
-        ctx.textAlign = 'center';
-        ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
-        requestRef.current = requestAnimationFrame(animate);
-        return;
-    }
-
-    // Death Sequence
-    if (state.gameEnded) {
-        draw(ctx, canvas);
-        return;
-    }
-    
-    // Check Death
-    if (state.p1.hp <= 0 || state.p2.hp <= 0) {
-        if (state.deathTimer === 0) {
-            state.deathTimer = 1; // Start death sequence
-            playSound('gameover');
-        }
-        state.deathTimer++;
-        
-        // Slow motion during death
-        if (state.time % 2 === 0) {
-            draw(ctx, canvas); 
-            // Spawn explosions on dead char
-            const deadChar = state.p1.hp <= 0 ? state.p1 : state.p2;
-            createParticles(
-                deadChar.x + (Math.random()-0.5)*40, 
-                deadChar.y + (Math.random()-0.5)*40, 
-                '#ef4444', 5, 5
-            );
-        }
-        
-        // End game after ~1.5 seconds (90 frames)
-        if (state.deathTimer > 90) {
-            state.gameEnded = true;
-            const winner = state.p1.hp > 0 ? p1 : (state.p2.hp > 0 ? p2 : null);
-            onGameOver({
-                winner,
-                message: winner ? (winner.id === 'player1' ? "You have proved your strength!" : "The Legend remains supreme.") : "Double KO!",
-            });
+        // Paused State
+        if (isPausedRef.current) {
+            draw(ctx, canvas);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 60px Cinzel';
+            ctx.textAlign = 'center';
+            ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+            requestRef.current = requestAnimationFrame(animate);
             return;
         }
 
-        requestRef.current = requestAnimationFrame(animate);
-        return;
-    }
-
-    state.time++;
-    if (state.screenShake > 0) state.screenShake *= 0.9;
-
-    // --- GAME LOGIC ---
-
-    if (state.time % 600 === 0) spawnPowerUp(canvas.width, canvas.height);
-
-    // Update Black Holes
-    for (let i = state.blackHoles.length - 1; i >= 0; i--) {
-        const bh = state.blackHoles[i];
-        bh.life--;
-        
-        // Sucking Effect
-        const target = bh.owner === 'p1' ? state.p2 : state.p1;
-        const dx = bh.x - target.x;
-        const dy = bh.y - target.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        
-        // Gravity force
-        if (dist > 10) {
-            const force = 1000 / (dist + 50); // Stronger when closer
-            const angle = Math.atan2(dy, dx);
-            target.vx += Math.cos(angle) * force;
-            target.vy += Math.sin(angle) * force;
+        // Death Sequence
+        if (state.gameEnded) {
+            draw(ctx, canvas);
+            return;
         }
         
-        // Damage if in center
-        if (dist < 40 && state.time % 10 === 0) {
-            target.hp -= 2;
-            target.hitFlash = 5;
-            if (bh.owner === 'p1') setP2Health(target.hp);
-            else setP1Health(target.hp);
+        // Check Death
+        if (state.p1.hp <= 0 || state.p2.hp <= 0) {
+            if (state.deathTimer === 0) {
+                state.deathTimer = 1; // Start death sequence
+                playSound('gameover');
+            }
+            state.deathTimer++;
+            
+            // Slow motion during death
+            if (state.time % 2 === 0) {
+                draw(ctx, canvas); 
+                // Spawn explosions on dead char
+                const deadChar = state.p1.hp <= 0 ? state.p1 : state.p2;
+                createParticles(
+                    deadChar.x + (Math.random()-0.5)*40, 
+                    deadChar.y + (Math.random()-0.5)*40, 
+                    '#ef4444', 5, 5
+                );
+            }
+            
+            // End game after ~1.5 seconds (90 frames)
+            if (state.deathTimer > 90) {
+                state.gameEnded = true;
+                const winner = state.p1.hp > 0 ? p1 : (state.p2.hp > 0 ? p2 : null);
+                onGameOver({
+                    winner,
+                    message: winner ? (winner.id === 'player1' ? "You have proved your strength!" : "The Legend remains supreme.") : "Double KO!",
+                });
+                return;
+            }
+
+            requestRef.current = requestAnimationFrame(animate);
+            return;
         }
 
-        // Visuals for BH
-        if (state.time % 3 === 0) {
-             state.particles.push({
-                x: bh.x + (Math.random()-0.5)*100,
-                y: bh.y + (Math.random()-0.5)*100,
-                vx: (bh.x - (bh.x + (Math.random()-0.5)*100)) * 0.05,
-                vy: (bh.y - (bh.y + (Math.random()-0.5)*100)) * 0.05,
-                life: 20,
-                color: '#7e22ce', // purple
-                size: 2
-            });
+        state.time++;
+        if (state.screenShake > 0) state.screenShake *= 0.9;
+
+        // --- GAME LOGIC ---
+
+        if (state.time % 600 === 0) spawnPowerUp(canvas.width, canvas.height);
+
+        // Update Black Holes
+        for (let i = state.blackHoles.length - 1; i >= 0; i--) {
+            const bh = state.blackHoles[i];
+            bh.life--;
+            
+            // Sucking Effect
+            const target = bh.owner === 'p1' ? state.p2 : state.p1;
+            const dx = bh.x - target.x;
+            const dy = bh.y - target.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            // Gravity force
+            if (dist > 10) {
+                const force = 1000 / (dist + 50); // Stronger when closer
+                const angle = Math.atan2(dy, dx);
+                target.vx += Math.cos(angle) * force;
+                target.vy += Math.sin(angle) * force;
+            }
+            
+            // Damage if in center
+            if (dist < 40 && state.time % 10 === 0) {
+                target.hp -= 2;
+                target.hitFlash = 5;
+                if (bh.owner === 'p1') setP2Health(target.hp);
+                else setP1Health(target.hp);
+            }
+
+            // Visuals for BH
+            if (state.time % 3 === 0) {
+                state.particles.push({
+                    x: bh.x + (Math.random()-0.5)*100,
+                    y: bh.y + (Math.random()-0.5)*100,
+                    vx: (bh.x - (bh.x + (Math.random()-0.5)*100)) * 0.05,
+                    vy: (bh.y - (bh.y + (Math.random()-0.5)*100)) * 0.05,
+                    life: 20,
+                    color: '#7e22ce', // purple
+                    size: 2
+                });
+            }
+
+            if (bh.life <= 0) state.blackHoles.splice(i, 1);
         }
 
-        if (bh.life <= 0) state.blackHoles.splice(i, 1);
-    }
+        // Effects Manager
+        const manageEffects = (char: typeof state.p1, isPlayer: boolean) => {
+            char.speed = char.baseSpeed;
+            char.radius = char.baseRadius;
+            let damageMult = 1;
+            let damageTakenMult = 1;
+            let isFrozen = false;
+            let isShielded = false;
+            let isLovely = false;
+            
+            if (char.hitFlash > 0) char.hitFlash--;
 
-    // Effects Manager
-    const manageEffects = (char: typeof state.p1, isPlayer: boolean) => {
-        char.speed = char.baseSpeed;
-        char.radius = char.baseRadius;
-        let damageMult = 1;
-        let damageTakenMult = 1;
-        let isFrozen = false;
-        let isShielded = false;
-        let isLovely = false;
-        
-        if (char.hitFlash > 0) char.hitFlash--;
-
-        for (let i = char.effects.length - 1; i >= 0; i--) {
-            const effect = char.effects[i];
-            effect.duration--;
-            if (effect.duration <= 0) {
-                char.effects.splice(i, 1);
-                continue;
-            }
-            if (effect.type === 'SPEED') char.speed *= 1.5;
-            if (effect.type === 'POWER') damageMult *= 2;
-            if (effect.type === 'FREEZE') isFrozen = true;
-            if (effect.type === 'SHIELD') isShielded = true;
-            if (effect.type === 'TOUGH') damageTakenMult *= 0.2;
-            if (effect.type === 'GIANT') {
-                char.radius = char.baseRadius * 2;
-                damageMult *= 1.5;
-            }
-            if (effect.type === 'GOLD_MODE') {
-                damageMult *= 3;
-            }
-            if (effect.type === 'LOVELY') {
-                isLovely = true;
-                // Heal tick
-                if (state.time % 10 === 0) {
-                    char.hp = Math.min(char.maxHp, char.hp + 2);
-                    if (isPlayer) setP1Health(char.hp); else setP2Health(char.hp);
+            for (let i = char.effects.length - 1; i >= 0; i--) {
+                const effect = char.effects[i];
+                effect.duration--;
+                if (effect.duration <= 0) {
+                    char.effects.splice(i, 1);
+                    continue;
                 }
-                // Spawn hearts
-                if (state.time % 15 === 0) {
-                    state.particles.push({
-                        x: char.x, y: char.y - char.radius, 
-                        vx: (Math.random()-0.5), vy: -2, life: 60, color: '#f472b6', size: 10, isHeart: true
-                    });
+                if (effect.type === 'SPEED') char.speed *= 1.5;
+                if (effect.type === 'POWER') damageMult *= 2;
+                if (effect.type === 'FREEZE') isFrozen = true;
+                if (effect.type === 'SHIELD') isShielded = true;
+                if (effect.type === 'TOUGH') damageTakenMult *= 0.2;
+                if (effect.type === 'GIANT') {
+                    char.radius = char.baseRadius * 2;
+                    damageMult *= 1.5;
+                }
+                if (effect.type === 'GOLD_MODE') {
+                    damageMult *= 3;
+                }
+                if (effect.type === 'LOVELY') {
+                    isLovely = true;
+                    // Heal tick
+                    if (state.time % 10 === 0) {
+                        char.hp = Math.min(char.maxHp, char.hp + 2);
+                        if (isPlayer) setP1Health(char.hp); else setP2Health(char.hp);
+                    }
+                    // Spawn hearts
+                    if (state.time % 15 === 0) {
+                        state.particles.push({
+                            x: char.x, y: char.y - char.radius, 
+                            vx: (Math.random()-0.5), vy: -2, life: 60, color: '#f472b6', size: 10, isHeart: true
+                        });
+                    }
                 }
             }
-        }
-        if (isFrozen) char.speed *= 0.2; 
-        
-        return { damageMult, damageTakenMult, isShielded, isLovely };
-    };
+            if (isFrozen) char.speed *= 0.2; 
+            
+            return { damageMult, damageTakenMult, isShielded, isLovely };
+        };
 
-    const p1Status = manageEffects(state.p1, true);
-    const p2Status = manageEffects(state.p2, false);
+        const p1Status = manageEffects(state.p1, true);
+        const p2Status = manageEffects(state.p2, false);
 
-    // P1 Movement
-    let moveX = 0, moveY = 0;
-    if (state.keys.ArrowUp || state.keys.KeyW) moveY = -1;
-    if (state.keys.ArrowDown || state.keys.KeyS) moveY = 1;
-    if (state.keys.ArrowLeft || state.keys.KeyA) moveX = -1;
-    if (state.keys.ArrowRight || state.keys.KeyD) moveX = 1;
+        // P1 Movement
+        let moveX = 0, moveY = 0;
+        if (state.keys.ArrowUp || state.keys.KeyW) moveY = -1;
+        if (state.keys.ArrowDown || state.keys.KeyS) moveY = 1;
+        if (state.keys.ArrowLeft || state.keys.KeyA) moveX = -1;
+        if (state.keys.ArrowRight || state.keys.KeyD) moveX = 1;
 
-    // Normalize diagonal movement
-    if (moveX !== 0 || moveY !== 0) {
-        const len = Math.sqrt(moveX*moveX + moveY*moveY);
-        moveX /= len;
-        moveY /= len;
-    }
-
-    state.p1.vx += moveX * state.p1.speed * 0.2; 
-    state.p1.vy += moveY * state.p1.speed * 0.2;
-    state.p1.vx *= 0.85; 
-    state.p1.vy *= 0.85;
-
-    state.p1.x += state.p1.vx;
-    state.p1.y += state.p1.vy;
-
-    // Boundaries
-    state.p1.x = Math.max(state.p1.radius, Math.min(canvas.width - state.p1.radius, state.p1.x));
-    state.p1.y = Math.max(state.p1.radius, Math.min(canvas.height - state.p1.radius, state.p1.y));
-
-    // P1 Shooting
-    if (state.p1.cooldown > 0) state.p1.cooldown--;
-    
-    if (state.keys.Space && state.p1.cooldown <= 0) {
-        playSound('shoot');
-        let angle;
-        
-        if (aimMode === 'MANUAL') {
-            angle = Math.atan2(state.mouse.y - state.p1.y, state.mouse.x - state.p1.x);
-        } else {
-            // Auto Aim at P2
-            angle = Math.atan2(state.p2.y - state.p1.y, state.p2.x - state.p1.x);
+        // Normalize diagonal movement
+        if (moveX !== 0 || moveY !== 0) {
+            const len = Math.sqrt(moveX*moveX + moveY*moveY);
+            if (len > 0) {
+                moveX /= len;
+                moveY /= len;
+            }
         }
 
-        const vx = Math.cos(angle);
-        const vy = Math.sin(angle);
+        state.p1.vx += moveX * state.p1.speed * 0.2; 
+        state.p1.vy += moveY * state.p1.speed * 0.2;
+        state.p1.vx *= 0.85; 
+        state.p1.vy *= 0.85;
 
-        state.bullets.push({
-            x: state.p1.x + vx * state.p1.radius,
-            y: state.p1.y + vy * state.p1.radius,
-            vx: vx * bulletVelocity, 
-            vy: vy * bulletVelocity,
-            owner: 'p1',
-            dmg: (8 + (p1.stats.power * 0.8)) * p1Status.damageMult,
-            size: 10, 
-            color: '#a855f7',
-            img: state.bulletImg || undefined
-        });
-        state.p1.cooldown = 15 - Math.min(10, p1.stats.speed); 
-    }
+        state.p1.x += state.p1.vx;
+        state.p1.y += state.p1.vy;
 
-    // P1 Special
-    if (state.keys.KeyE && state.p1.specialCharge >= 100) {
-        fireSpecial(state.p1, 'p1', p1Status.damageMult);
-    }
+        // Boundaries
+        state.p1.x = Math.max(state.p1.radius, Math.min(canvas.width - state.p1.radius, state.p1.x));
+        state.p1.y = Math.max(state.p1.radius, Math.min(canvas.height - state.p1.radius, state.p1.y));
 
-    // P2 AI
-    const dx = state.p1.x - state.p2.x;
-    const dy = state.p1.y - state.p2.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+        // P1 Shooting
+        if (state.p1.cooldown > 0) state.p1.cooldown--;
+        
+        if (state.keys.Space && state.p1.cooldown <= 0) {
+            playSound('shoot');
+            let angle = 0;
+            
+            if (aimMode === 'MANUAL') {
+                const dx = state.mouse.x - state.p1.x;
+                const dy = state.mouse.y - state.p1.y;
+                angle = Math.atan2(dy || 0, dx || 1);
+            } else {
+                // Auto Aim at P2
+                angle = Math.atan2(state.p2.y - state.p1.y, state.p2.x - state.p1.x);
+            }
 
-    if (dist > 350) {
-        const angle = Math.atan2(dy, dx);
-        state.p2.vx += Math.cos(angle) * state.p2.speed * 0.1;
-        state.p2.vy += Math.sin(angle) * state.p2.speed * 0.1;
-    } else {
-        state.p2.vx += Math.sin(state.time * 0.05) * state.p2.speed * 0.15;
-        state.p2.vy += Math.cos(state.time * 0.03) * state.p2.speed * 0.15;
-    }
-    state.p2.vx *= 0.9;
-    state.p2.vy *= 0.9;
-    
-    state.p2.x += state.p2.vx;
-    state.p2.y += state.p2.vy;
-    state.p2.x = Math.max(state.p2.radius, Math.min(canvas.width - state.p2.radius, state.p2.x));
-    state.p2.y = Math.max(state.p2.radius, Math.min(canvas.height - state.p2.radius, state.p2.y));
+            const vx = Math.cos(angle);
+            const vy = Math.sin(angle);
 
-    // P2 Shooting
-    if (state.p2.cooldown > 0) state.p2.cooldown--;
-    else {
-      const bossDmg = (5 + (p2.stats.power * 0.6)) * p2Status.damageMult;
-      if (state.time % 250 < 120) {
-        playSound('shoot');
-        const angle = Math.atan2(state.p1.y - state.p2.y, state.p1.x - state.p2.x);
-        state.bullets.push({
-          x: state.p2.x,
-          y: state.p2.y,
-          vx: Math.cos(angle) * 7,
-          vy: Math.sin(angle) * 7,
-          owner: 'p2',
-          dmg: bossDmg,
-          size: 8,
-          color: '#ef4444'
-        });
-        state.p2.cooldown = 35;
-      } else {
-        playSound('shoot');
-        for(let i=0; i<8; i++){
-            const angle = (i / 8) * Math.PI * 2;
             state.bullets.push({
-                x: state.p2.x,
-                y: state.p2.y,
-                vx: Math.cos(angle) * 5, 
-                vy: Math.sin(angle) * 5,
-                owner: 'p2',
-                dmg: bossDmg * 0.8,
-                size: 7,
-                color: '#ef4444'
-              });
+                x: state.p1.x + vx * state.p1.radius,
+                y: state.p1.y + vy * state.p1.radius,
+                vx: vx * bulletVelocity, 
+                vy: vy * bulletVelocity,
+                owner: 'p1',
+                dmg: (8 + (p1.stats.power * 0.8)) * p1Status.damageMult,
+                size: 10, 
+                color: '#a855f7',
+                img: state.bulletImg || undefined
+            });
+            state.p1.cooldown = 15 - Math.min(10, p1.stats.speed); 
         }
-        state.p2.cooldown = 90;
-      }
-    }
 
-    if (state.p2.specialCharge >= 100) fireSpecial(state.p2, 'p2', p2Status.damageMult);
+        // P1 Special
+        if (state.keys.KeyE && state.p1.specialCharge >= 100) {
+            fireSpecial(state.p1, 'p1', p1Status.damageMult);
+        }
 
-    // Update Bullets & Collisions
-    updateBullets(canvas, state, p1Status, p2Status);
+        // P2 AI
+        const dx = state.p1.x - state.p2.x;
+        const dy = state.p1.y - state.p2.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Power Ups Collision
-    state.powerups.forEach((p, i) => {
-        p.rotation += 0.05;
-        p.life--;
-        const dist1 = Math.sqrt((p.x - state.p1.x) ** 2 + (p.y - state.p1.y) ** 2);
-        if (dist1 < state.p1.radius + p.radius) {
-            applyPowerUp(state.p1, p.type, 'p1');
-            state.powerups.splice(i, 1);
+        if (dist > 350) {
+            const angle = Math.atan2(dy, dx);
+            state.p2.vx += Math.cos(angle) * state.p2.speed * 0.1;
+            state.p2.vy += Math.sin(angle) * state.p2.speed * 0.1;
         } else {
-            const dist2 = Math.sqrt((p.x - state.p2.x) ** 2 + (p.y - state.p2.y) ** 2);
-            if (dist2 < state.p2.radius + p.radius) {
-                applyPowerUp(state.p2, p.type, 'p2');
-                state.powerups.splice(i, 1);
-            } else if (p.life <= 0) {
-                state.powerups.splice(i, 1);
-            }
+            state.p2.vx += Math.sin(state.time * 0.05) * state.p2.speed * 0.15;
+            state.p2.vy += Math.cos(state.time * 0.03) * state.p2.speed * 0.15;
         }
-    });
+        state.p2.vx *= 0.9;
+        state.p2.vy *= 0.9;
+        
+        state.p2.x += state.p2.vx;
+        state.p2.y += state.p2.vy;
+        state.p2.x = Math.max(state.p2.radius, Math.min(canvas.width - state.p2.radius, state.p2.x));
+        state.p2.y = Math.max(state.p2.radius, Math.min(canvas.height - state.p2.radius, state.p2.y));
 
-    // Particles & Text
-    updateParticlesAndText(state);
+        // P2 Shooting
+        if (state.p2.cooldown > 0) state.p2.cooldown--;
+        else {
+        const bossDmg = (5 + (p2.stats.power * 0.6)) * p2Status.damageMult;
+        if (state.time % 250 < 120) {
+            playSound('shoot');
+            const angle = Math.atan2(state.p1.y - state.p2.y, state.p1.x - state.p2.x);
+            state.bullets.push({
+            x: state.p2.x,
+            y: state.p2.y,
+            vx: Math.cos(angle) * 7,
+            vy: Math.sin(angle) * 7,
+            owner: 'p2',
+            dmg: bossDmg,
+            size: 8,
+            color: '#ef4444'
+            });
+            state.p2.cooldown = 35;
+        } else {
+            playSound('shoot');
+            for(let i=0; i<8; i++){
+                const angle = (i / 8) * Math.PI * 2;
+                state.bullets.push({
+                    x: state.p2.x,
+                    y: state.p2.y,
+                    vx: Math.cos(angle) * 5, 
+                    vy: Math.sin(angle) * 5,
+                    owner: 'p2',
+                    dmg: bossDmg * 0.8,
+                    size: 7,
+                    color: '#ef4444'
+                });
+            }
+            state.p2.cooldown = 90;
+        }
+        }
 
-    draw(ctx, canvas);
-    requestRef.current = requestAnimationFrame(animate);
+        if (state.p2.specialCharge >= 100) fireSpecial(state.p2, 'p2', p2Status.damageMult);
+
+        // Update Bullets & Collisions
+        updateBullets(canvas, state, p1Status, p2Status);
+
+        // Power Ups Collision
+        state.powerups.forEach((p, i) => {
+            p.rotation += 0.05;
+            p.life--;
+            const dist1 = Math.sqrt((p.x - state.p1.x) ** 2 + (p.y - state.p1.y) ** 2);
+            if (dist1 < state.p1.radius + p.radius) {
+                applyPowerUp(state.p1, p.type, 'p1');
+                state.powerups.splice(i, 1);
+            } else {
+                const dist2 = Math.sqrt((p.x - state.p2.x) ** 2 + (p.y - state.p2.y) ** 2);
+                if (dist2 < state.p2.radius + p.radius) {
+                    applyPowerUp(state.p2, p.type, 'p2');
+                    state.powerups.splice(i, 1);
+                } else if (p.life <= 0) {
+                    state.powerups.splice(i, 1);
+                }
+            }
+        });
+
+        // Particles & Text
+        updateParticlesAndText(state);
+
+        draw(ctx, canvas);
+        requestRef.current = requestAnimationFrame(animate);
+
+    } catch (error) {
+        console.error("Game Loop Error:", error);
+        // Try to recover
+        requestRef.current = requestAnimationFrame(animate);
+    }
   };
 
   const updateBullets = (canvas: HTMLCanvasElement, state: any, p1Status: any, p2Status: any) => {
@@ -967,7 +993,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     // Particles
     state.particles.forEach(p => {
       ctx.fillStyle = p.color;
-      ctx.globalAlpha = p.life / 30;
+      ctx.globalAlpha = Math.max(0, p.life / 30); // Prevent negative alpha
       if (p.isHeart) {
           // Draw Heart
           ctx.beginPath();
@@ -1043,7 +1069,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
           ctx.translate(b.x, b.y);
           const rotation = Math.atan2(b.vy, b.vx);
           ctx.rotate(rotation + Math.PI/2);
-          ctx.drawImage(b.img, -b.size, -b.size, b.size * 2, b.size * 2);
+          try {
+              ctx.drawImage(b.img, -b.size, -b.size, b.size * 2, b.size * 2);
+          } catch(e) {
+              // Fallback
+              ctx.fillStyle = b.color;
+              ctx.beginPath(); ctx.arc(0,0,b.size,0,Math.PI*2); ctx.fill();
+          }
           ctx.restore();
       } else {
         ctx.fillStyle = b.color;
@@ -1153,7 +1185,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         ctx.fillRect(-char.radius, -char.radius, char.radius * 2, char.radius * 2);
     } else {
         try {
-            ctx.drawImage(char.img, -char.radius, -char.radius, char.radius * 2, char.radius * 2);
+            // Draw image or fill if not ready
+            if (char.img.complete && char.img.naturalWidth !== 0) {
+                ctx.drawImage(char.img, -char.radius, -char.radius, char.radius * 2, char.radius * 2);
+            } else {
+                throw new Error("Image not ready");
+            }
+            
             // Overlays
             if (isTough) {
                 ctx.globalCompositeOperation = 'saturation';
@@ -1182,9 +1220,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     ctx.strokeStyle = glowColor;
     ctx.lineWidth = 3;
     ctx.stroke();
-    
-    // Bars (Scale back down if Giant so bars aren't huge relative to screen but stay with char)
-    // Actually simpler to just draw bars normally relative to current context
     
     const hpPct = Math.max(0, char.hp / char.maxHp);
     ctx.fillStyle = '#374151';
