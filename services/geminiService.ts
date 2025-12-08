@@ -1,8 +1,6 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { FighterStats } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const FIGHTER_SCHEMA: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -27,6 +25,7 @@ export async function analyzeFighters(
   const cleanBase64 = (str: string) => str.replace(/^data:image\/\w+;base64,/, "");
 
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: {

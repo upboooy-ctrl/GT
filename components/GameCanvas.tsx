@@ -124,102 +124,108 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
 
   // --- Sound Synthesizer ---
   const playSound = (type: 'shoot' | 'hit' | 'special' | 'powerup' | 'freeze' | 'gameover' | 'void' | 'shield' | 'lovely') => {
-    if (!audioCtxRef.current) {
-        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') ctx.resume();
+    try {
+        if (!audioCtxRef.current) {
+            audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        const ctx = audioCtxRef.current;
+        if (ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+        }
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    
-    const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        const now = ctx.currentTime;
 
-    switch (type) {
-        case 'shoot':
-            osc.type = 'square';
-            osc.frequency.setValueAtTime(600, now);
-            osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
-            gain.gain.setValueAtTime(0.05, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-            osc.start(now);
-            osc.stop(now + 0.1);
-            break;
-        case 'hit':
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(100, now);
-            osc.frequency.exponentialRampToValueAtTime(10, now + 0.1);
-            gain.gain.setValueAtTime(0.1, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-            osc.start(now);
-            osc.stop(now + 0.1);
-            break;
-        case 'special':
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(200, now);
-            osc.frequency.linearRampToValueAtTime(50, now + 0.5);
-            gain.gain.setValueAtTime(0.2, now);
-            gain.gain.linearRampToValueAtTime(0, now + 0.5);
-            osc.start(now);
-            osc.stop(now + 0.5);
-            break;
-        case 'powerup':
-             osc.type = 'sine';
-             osc.frequency.setValueAtTime(440, now);
-             osc.frequency.setValueAtTime(554, now + 0.1); // C#
-             osc.frequency.setValueAtTime(659, now + 0.2); // E
-             gain.gain.setValueAtTime(0.1, now);
-             gain.gain.linearRampToValueAtTime(0, now + 0.3);
-             osc.start(now);
-             osc.stop(now + 0.3);
-             break;
-        case 'freeze':
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(1500, now);
-            osc.frequency.linearRampToValueAtTime(2000, now + 0.3);
-            gain.gain.setValueAtTime(0.1, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-            osc.start(now);
-            osc.stop(now + 0.3);
-            break;
-         case 'void':
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(50, now);
-            osc.frequency.exponentialRampToValueAtTime(10, now + 1.0);
-            gain.gain.setValueAtTime(0.3, now);
-            gain.gain.linearRampToValueAtTime(0, now + 1.0);
-            osc.start(now);
-            osc.stop(now + 1.0);
-            break;
-        case 'gameover':
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(300, now);
-            osc.frequency.linearRampToValueAtTime(50, now + 1.0);
-            gain.gain.setValueAtTime(0.2, now);
-            gain.gain.linearRampToValueAtTime(0, now + 1.0);
-            osc.start(now);
-            osc.stop(now + 1.0);
-            break;
-        case 'shield':
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(200, now);
-            osc.frequency.linearRampToValueAtTime(600, now + 0.5);
-            gain.gain.setValueAtTime(0.2, now);
-            gain.gain.linearRampToValueAtTime(0, now + 0.5);
-            osc.start(now);
-            osc.stop(now + 0.5);
-            break;
-        case 'lovely':
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(400, now);
-            osc.frequency.linearRampToValueAtTime(400, now + 0.1); // Stable
-            gain.gain.setValueAtTime(0.1, now);
-            gain.gain.linearRampToValueAtTime(0, now + 1.0);
-            osc.start(now);
-            osc.stop(now + 1.0);
-            break;
+        switch (type) {
+            case 'shoot':
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+                break;
+            case 'hit':
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, now);
+                osc.frequency.exponentialRampToValueAtTime(10, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+                break;
+            case 'special':
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(50, now + 0.5);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+                break;
+            case 'powerup':
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(554, now + 0.1); // C#
+                osc.frequency.setValueAtTime(659, now + 0.2); // E
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+                break;
+            case 'freeze':
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1500, now);
+                osc.frequency.linearRampToValueAtTime(2000, now + 0.3);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+                break;
+            case 'void':
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(50, now);
+                osc.frequency.exponentialRampToValueAtTime(10, now + 1.0);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0, now + 1.0);
+                osc.start(now);
+                osc.stop(now + 1.0);
+                break;
+            case 'gameover':
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.linearRampToValueAtTime(50, now + 1.0);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 1.0);
+                osc.start(now);
+                osc.stop(now + 1.0);
+                break;
+            case 'shield':
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(600, now + 0.5);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+                break;
+            case 'lovely':
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.linearRampToValueAtTime(400, now + 0.1); // Stable
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 1.0);
+                osc.start(now);
+                osc.stop(now + 1.0);
+                break;
+        }
+    } catch (e) {
+        // Audio not supported or blocked, ignore
     }
   };
 
@@ -231,6 +237,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
   };
 
   useEffect(() => {
+    // Initialize Canvas Size
+    if (canvasRef.current) {
+        canvasRef.current.width = 800;
+        canvasRef.current.height = 600;
+    }
+
     // Load Images
     gameState.current.p1.img.src = p1.imageSrc;
     gameState.current.p2.img.src = p2.imageSrc;
@@ -257,17 +269,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-        const rect = canvasRef.current?.getBoundingClientRect();
-        if (rect) {
-            gameState.current.mouse.x = e.clientX - rect.left;
-            gameState.current.mouse.y = e.clientY - rect.top;
-        }
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        
+        // Accurate Mouse Mapping for Scaled Canvas
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        gameState.current.mouse.x = (e.clientX - rect.left) * scaleX;
+        gameState.current.mouse.y = (e.clientY - rect.top) * scaleY;
     };
     
     const initAudio = () => {
-         if (!audioCtxRef.current) {
-            audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
+         try {
+            if (!audioCtxRef.current) {
+                audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            }
+         } catch(e) {}
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -406,8 +425,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = 800;
-    canvas.height = 600;
+    // Use clearRect instead of resizing canvas to avoid context reset issues
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const state = gameState.current;
 

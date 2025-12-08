@@ -144,7 +144,13 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) =
                 </div>
             ) : (
                 <label className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, setImg1)} />
+                <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={(e) => handleFileChange(e, setImg1)}
+                    onClick={(e) => (e.target as HTMLInputElement).value = ''} 
+                />
                 <div className="w-16 h-16 mb-2 rounded-full bg-slate-800 flex items-center justify-center group-hover:scale-110 transition-transform">
                     <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                 </div>
@@ -216,7 +222,13 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) =
                     </div>
                 ) : (
                     <label className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
-                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, setBulletImg)} />
+                    <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => handleFileChange(e, setBulletImg)}
+                        onClick={(e) => (e.target as HTMLInputElement).value = ''}
+                    />
                     <div className="w-8 h-8 mb-2 rounded-full bg-slate-800 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <svg className="w-4 h-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                     </div>
@@ -324,7 +336,13 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) =
                 </div>
             ) : (
                 <label className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, setImg2)} />
+                <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={(e) => handleFileChange(e, setImg2)}
+                    onClick={(e) => (e.target as HTMLInputElement).value = ''}
+                />
                 <div className="w-16 h-16 mb-2 rounded-full bg-slate-800 flex items-center justify-center group-hover:scale-110 transition-transform">
                     <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                 </div>
