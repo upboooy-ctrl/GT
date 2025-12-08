@@ -31,4 +31,9 @@ export interface GameResult {
 
 export type PowerUpType = 'HEAL' | 'SPEED' | 'POWER' | 'BLACK_HOLE';
 
-export type SpecialId = 'GMASTI' | '6FTBADDIE' | 'ROHANMOB' | 'LAMBARDAAR' | 'SINGH' | 'SONI' | 'PAL';
+export type SpecialId = 'GMASTI' | '6FTBADDIE' | 'ROHANMOB' | 'LAMBARDAAR' | 'SINGH' | 'SONI' | 'PAL' | 'MANAN' | 'GT_MODE';
+
+export interface ActiveEffect {
+    type: PowerUpType | 'FREEZE' | 'SHIELD' | 'GIANT' | 'TOUGH' | 'GOLD_MODE' | 'LOVELY' | 'MANAN_CURSE' | 'SHRINK' | 'GT_OVERDRIVE';
+    duration: number; // frames
+}

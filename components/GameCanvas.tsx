@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FighterData, GameResult, PowerUpType, SpecialId } from '../types';
+import { FighterData, GameResult, PowerUpType, SpecialId, ActiveEffect } from '../types';
 
 interface GameCanvasProps {
   p1: FighterData;
@@ -18,11 +18,6 @@ interface PowerUp {
     radius: number;
     life: number;
     rotation: number;
-}
-
-interface ActiveEffect {
-    type: PowerUpType | 'FREEZE' | 'SHIELD' | 'GIANT' | 'TOUGH' | 'GOLD_MODE' | 'LOVELY';
-    duration: number; // frames
 }
 
 interface BlackHole {
@@ -52,7 +47,7 @@ interface Bullet {
     size: number;
     color: string;
     isSpecial?: boolean;
-    logicType?: 'FIRE' | 'ICE'; 
+    logicType?: 'FIRE' | 'ICE' | 'MANAN'; 
     img?: HTMLImageElement;
 }
 
@@ -352,13 +347,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
   const fireSpecial = (char: typeof gameState.current.p1, owner: 'p1'|'p2', dmgMult: number) => {
      if (char.specialCharge < 100) return;
      
-     char.specialCharge = 0;
-     if (owner === 'p1') setP1Special(0);
-     else setP2Special(0);
-     
      const isP1 = owner === 'p1';
      const specialId: SpecialId = isP1 ? (p1.specialId || 'GMASTI') : (p2.specialId || '6FTBADDIE');
      const displayName = isP1 ? p1.stats.specialMove : p2.stats.specialMove;
+
+     // GT MODE CHECK FIRST (Cost Logic)
+     if (specialId === 'GT_MODE') {
+         if (char.hp < 10) return; // Cannot sacrifice last bit of life
+         
+         // Pay the price
+         const sacrifice = Math.floor(char.hp / 2);
+         char.hp -= sacrifice;
+         if (isP1) setP1Health(char.hp); else setP2Health(char.hp);
+         
+         // Visuals
+         addFloatingText(char.x, char.y - 90, `SACRIFICE -${sacrifice} HP`, '#ef4444', 'large');
+         addFloatingText(char.x, char.y - 60, "GT OVERDRIVE!", '#a855f7', 'large');
+         playSound('void');
+         
+         // Apply Buff
+         char.effects.push({ type: 'GT_OVERDRIVE', duration: 600 }); // 10 seconds of mayhem
+         char.specialCharge = 0;
+         if (isP1) setP1Special(0); else setP2Special(0);
+         return;
+     }
+
+     // Standard Cost
+     char.specialCharge = 0;
+     if (isP1) setP1Special(0);
+     else setP2Special(0);
 
      addFloatingText(char.x, char.y - 60, displayName + "!", '#ffffff', 'large');
      
@@ -376,26 +393,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
              addFloatingText(char.x, char.y - 90, "GIANT MODE", '#fcd34d', 'large');
              break;
              
-         case 'SINGH': // Tuff
+         case 'SINGH': // Tuff + Power
              char.effects.push({ type: 'TOUGH', duration: 600 }); // 10s
              playSound('shield');
              addFloatingText(char.x, char.y - 90, "IRON WILL", '#94a3b8', 'large');
              break;
              
-         case 'SONI': // Gold
-             char.effects.push({ type: 'GOLD_MODE', duration: 480 }); // 8s
+         case 'SONI': // Gold Mode (BROKEN: Shield + Speed + Power)
+             char.effects.push({ type: 'GOLD_MODE', duration: 300 }); // 5s (Short but OP)
              playSound('powerup');
-             addFloatingText(char.x, char.y - 90, "GOLD RUSH", '#facc15', 'large');
+             addFloatingText(char.x, char.y - 90, "GOD MODE", '#facc15', 'large');
              break;
              
          case 'PAL': // Lovely
-            // Apply to both players or global? Global effect essentially, applied to both
             gameState.current.p1.effects.push({ type: 'LOVELY', duration: 600 });
             gameState.current.p2.effects.push({ type: 'LOVELY', duration: 600 });
             playSound('lovely');
             addFloatingText(canvasRef.current!.width/2, canvasRef.current!.height/2, "PEACE & LOVE", '#f472b6', 'large');
             break;
-            
+        
+        case 'MANAN': // Curse + Shrink
+             char.effects.push({ type: 'SHRINK', duration: 300 }); // 5s self shrink
+             addFloatingText(char.x, char.y - 90, "SHRINK!", '#3b82f6', 'small');
+             // Fallthrough to fire projectile logic...
+        
          // Projectile Based
          case 'GMASTI':
          case '6FTBADDIE':
@@ -419,6 +440,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
              }
              
              if (isNaN(angle)) angle = 0;
+             
+             let bulletColor = '#ef4444';
+             let logicType: 'FIRE' | 'ICE' | 'MANAN' = 'FIRE';
+             
+             if (specialId === '6FTBADDIE') { bulletColor = '#06b6d4'; logicType = 'ICE'; }
+             else if (specialId === 'MANAN') { bulletColor = '#3b82f6'; logicType = 'MANAN'; }
 
              gameState.current.bullets.push({
                  x: char.x + Math.cos(angle) * 40,
@@ -428,12 +455,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                  owner: owner,
                  dmg: (isP1 ? 80 : 50) * dmgMult, 
                  size: isP1 ? 40 : 30,
-                 color: specialId === 'GMASTI' ? '#ef4444' : '#06b6d4',
+                 color: bulletColor,
                  isSpecial: true,
-                 logicType: specialId === 'GMASTI' ? 'FIRE' : 'ICE'
+                 logicType: logicType
              });
              gameState.current.screenShake = 20;
-             createParticles(char.x, char.y, specialId === 'GMASTI' ? '#ef4444' : '#06b6d4', 50, 4);
+             createParticles(char.x, char.y, bulletColor, 50, 4);
              break;
      }
   };
@@ -571,6 +598,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             let isFrozen = false;
             let isShielded = false;
             let isLovely = false;
+            let isGold = false;
+            let isGtMode = false;
             
             if (char.hitFlash > 0) char.hitFlash--;
 
@@ -585,13 +614,38 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                 if (effect.type === 'POWER') damageMult *= 2;
                 if (effect.type === 'FREEZE') isFrozen = true;
                 if (effect.type === 'SHIELD') isShielded = true;
-                if (effect.type === 'TOUGH') damageTakenMult *= 0.2;
+                if (effect.type === 'TOUGH') {
+                    damageTakenMult *= 0.2; // 80% Reduction
+                    damageMult *= 2; // Added Power boost for SINGH
+                }
                 if (effect.type === 'GIANT') {
                     char.radius = char.baseRadius * 2;
                     damageMult *= 1.5;
                 }
                 if (effect.type === 'GOLD_MODE') {
                     damageMult *= 3;
+                    char.speed *= 2;
+                    isShielded = true; 
+                    isGold = true;
+                }
+                if (effect.type === 'SHRINK') {
+                    char.radius = char.baseRadius * 0.5; // Half size
+                }
+                if (effect.type === 'MANAN_CURSE') {
+                    // DoT: -10 HP/sec (every 60 frames)
+                    if (state.time % 60 === 0) {
+                        char.hp -= 10;
+                        char.hitFlash = 5;
+                        if (isPlayer) setP1Health(char.hp); else setP2Health(char.hp);
+                        addFloatingText(char.x, char.y - 30, "-10", '#3b82f6', 'small');
+                    }
+                    if (state.time % 10 === 0) {
+                         state.particles.push({
+                            x: char.x + (Math.random()-0.5)*char.radius, 
+                            y: char.y + (Math.random()-0.5)*char.radius, 
+                            vx: 0, vy: -1, life: 20, color: '#3b82f6', size: 2
+                        });
+                    }
                 }
                 if (effect.type === 'LOVELY') {
                     isLovely = true;
@@ -606,10 +660,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                         });
                     }
                 }
+                if (effect.type === 'GT_OVERDRIVE') {
+                    isGtMode = true;
+                    char.speed *= 1.5;
+                    if (state.time % 5 === 0) { // Rainbow trail
+                        createParticles(char.x, char.y, `hsl(${state.time % 360}, 100%, 50%)`, 2, 2);
+                    }
+                }
             }
             if (isFrozen) char.speed *= 0.2; 
             
-            return { damageMult, damageTakenMult, isShielded, isLovely };
+            return { damageMult, damageTakenMult, isShielded, isLovely, isGtMode };
         };
 
         const p1Status = manageEffects(state.p1, true);
@@ -665,19 +726,43 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             const vx = Math.cos(angle);
             const vy = Math.sin(angle);
             const validVelocity = isNaN(bulletVelocity) ? 12 : bulletVelocity;
-
-            state.bullets.push({
-                x: state.p1.x + vx * state.p1.radius,
-                y: state.p1.y + vy * state.p1.radius,
-                vx: vx * validVelocity, 
-                vy: vy * validVelocity,
-                owner: 'p1',
-                dmg: (8 + (p1.stats.power * 0.8)) * p1Status.damageMult,
-                size: 10, 
-                color: '#a855f7',
-                img: state.bulletImg || undefined
-            });
-            state.p1.cooldown = 15 - Math.min(10, p1.stats.speed); 
+            
+            // Logic for GT Overdrive
+            if (p1Status.isGtMode) {
+                // Random special bullet logic
+                const rand = Math.random();
+                let bColor = '#ef4444';
+                let bType: 'FIRE' | 'ICE' | 'MANAN' = 'FIRE';
+                if (rand > 0.6) { bColor = '#06b6d4'; bType = 'ICE'; }
+                else if (rand > 0.3) { bColor = '#3b82f6'; bType = 'MANAN'; }
+                
+                state.bullets.push({
+                    x: state.p1.x + vx * state.p1.radius,
+                    y: state.p1.y + vy * state.p1.radius,
+                    vx: vx * validVelocity * 1.5, 
+                    vy: vy * validVelocity * 1.5,
+                    owner: 'p1',
+                    dmg: (15 + p1.stats.power) * p1Status.damageMult, // Heavy damage
+                    size: 25, 
+                    color: bColor,
+                    isSpecial: true,
+                    logicType: bType
+                });
+                state.p1.cooldown = 4; // Machine gun
+            } else {
+                state.bullets.push({
+                    x: state.p1.x + vx * state.p1.radius,
+                    y: state.p1.y + vy * state.p1.radius,
+                    vx: vx * validVelocity, 
+                    vy: vy * validVelocity,
+                    owner: 'p1',
+                    dmg: (8 + (p1.stats.power * 0.8)) * p1Status.damageMult,
+                    size: 10, 
+                    color: '#a855f7',
+                    img: state.bulletImg || undefined
+                });
+                state.p1.cooldown = 15 - Math.min(10, p1.stats.speed); 
+            }
         }
 
         // P1 Special
@@ -789,7 +874,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         if (b.isSpecial && state.time % 2 === 0) {
              state.particles.push({
                 x: b.x, y: b.y, vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2, life: 15,
-                color: b.logicType === 'FIRE' ? '#f59e0b' : '#cffafe',
+                color: b.logicType === 'FIRE' ? '#f59e0b' : (b.logicType === 'MANAN' ? '#3b82f6' : '#cffafe'),
                 size: Math.random() * 4 + 2
              });
         }
@@ -835,6 +920,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                     target.effects.push({ type: 'FREEZE', duration: 180 });
                     addFloatingText(target.x, target.y - 70, "FROZEN!", '#06b6d4', 'large');
                     playSound('freeze');
+                }
+                if (b.isSpecial && b.logicType === 'MANAN') {
+                    target.effects.push({ type: 'MANAN_CURSE', duration: 480 }); // 8s
+                    addFloatingText(target.x, target.y - 70, "CURSED!", '#1e3a8a', 'large');
+                    playSound('freeze'); // Reuse weird sound
                 }
                 
                 const attacker = b.owner === 'p1' ? state.p1 : state.p2;
@@ -1107,6 +1197,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     const isTough = char.effects.some((e: ActiveEffect) => e.type === 'TOUGH');
     const isGold = char.effects.some((e: ActiveEffect) => e.type === 'GOLD_MODE');
     const isLovely = char.effects.some((e: ActiveEffect) => e.type === 'LOVELY');
+    const isCursed = char.effects.some((e: ActiveEffect) => e.type === 'MANAN_CURSE');
+    const isGtMode = char.effects.some((e: ActiveEffect) => e.type === 'GT_OVERDRIVE');
 
     if (hasSpeed) glowColor = '#3b82f6';
     if (hasPower) glowColor = '#ef4444';
@@ -1114,6 +1206,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     if (isShielded) glowColor = '#ffffff';
     if (isGold) glowColor = '#fbbf24';
     if (isLovely) glowColor = '#f472b6';
+    if (isCursed) glowColor = '#1e3a8a';
+    if (isGtMode) glowColor = `hsl(${time % 360}, 100%, 60%)`;
 
     ctx.translate(char.x, char.y);
 
@@ -1131,6 +1225,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         ctx.lineWidth = 2;
         ctx.stroke();
     }
+    
+    // Cursed Visual
+    if (isCursed) {
+        ctx.beginPath();
+        ctx.arc(0, 0, char.radius + 10, 0, Math.PI*2);
+        ctx.strokeStyle = '#1e3a8a';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
 
     // Pulse effect if special ready
     if (char.specialCharge >= 100) {
@@ -1141,7 +1246,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         ctx.stroke();
     }
 
-    if (hasSpeed || hasPower || isGold || isTough) {
+    if (hasSpeed || hasPower || isGold || isTough || isGtMode) {
         ctx.strokeStyle = glowColor;
         ctx.lineWidth = 3;
         ctx.beginPath();
