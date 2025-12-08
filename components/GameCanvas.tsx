@@ -89,7 +89,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         img: new Image(), 
         radius: 40, 
         baseRadius: 40,
-        baseSpeed: 3 + (p1.stats.speed * 0.3), speed: 3 + (p1.stats.speed * 0.3), 
+        baseSpeed: 3 + ((p1.stats.speed || 5) * 0.3), speed: 3 + ((p1.stats.speed || 5) * 0.3), 
         effects: [] as ActiveEffect[],
         hitFlash: 0,
         specialCharge: 0
@@ -102,7 +102,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         img: new Image(), 
         radius: 45, 
         baseRadius: 45,
-        baseSpeed: 2 + (p2.stats.speed * 0.2), speed: 2 + (p2.stats.speed * 0.2), 
+        baseSpeed: 2 + ((p2.stats.speed || 5) * 0.2), speed: 2 + ((p2.stats.speed || 5) * 0.2), 
         phase: 0, 
         effects: [] as ActiveEffect[],
         hitFlash: 0,
@@ -320,10 +320,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
   }, []);
 
   const spawnPowerUp = (width: number, height: number) => {
-      if (allowedPowerUps.length === 0) return;
+      if (!allowedPowerUps || allowedPowerUps.length === 0) return;
 
       const randIndex = Math.floor(Math.random() * allowedPowerUps.length);
       const type = allowedPowerUps[randIndex];
+      if (!type) return;
 
       const margin = 100;
       gameState.current.powerups.push({
@@ -338,7 +339,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
 
   const addFloatingText = (x: number, y: number, text: string, color: string, size: 'small' | 'large' = 'small') => {
       gameState.current.texts.push({
-          x, y: y - 20,
+          x: isNaN(x) ? 0 : x, 
+          y: (isNaN(y) ? 0 : y) - 20,
           text,
           color,
           life: 60,
@@ -416,6 +418,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                 angle = Math.atan2(target.y - char.y, target.x - char.x);
              }
              
+             if (isNaN(angle)) angle = 0;
+
              gameState.current.bullets.push({
                  x: char.x + Math.cos(angle) * 40,
                  y: char.y + Math.sin(angle) * 40,
@@ -435,18 +439,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
   };
 
   const animate = (timestamp: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // 1. Clear Screen (Always safe to do)
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const state = gameState.current;
+
+    // 2. Update Logic (Try/Catch Wrapper)
     try {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        if (state.gameEnded) {
+            // Only draw calls needed
+        } else if (isPausedRef.current) {
+            // Paused state, no update
+        } else {
+             updateGameLogic(canvas, state);
+        }
+    } catch (error) {
+        console.error("Game Update Error:", error);
+    }
 
-        // Use clearRect instead of resizing canvas to avoid context reset issues
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        const state = gameState.current;
-
-        // Paused State
+    // 3. Draw Logic (Try/Catch Wrapper)
+    try {
         if (isPausedRef.current) {
             draw(ctx, canvas);
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
@@ -455,16 +472,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             ctx.font = '900 60px Cinzel';
             ctx.textAlign = 'center';
             ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
-            requestRef.current = requestAnimationFrame(animate);
-            return;
-        }
-
-        // Death Sequence
-        if (state.gameEnded) {
+        } else {
             draw(ctx, canvas);
-            return;
         }
-        
+    } catch (error) {
+        console.error("Game Draw Error:", error);
+    }
+    
+    requestRef.current = requestAnimationFrame(animate);
+  };
+
+  const updateGameLogic = (canvas: HTMLCanvasElement, state: any) => {
         // Check Death
         if (state.p1.hp <= 0 || state.p2.hp <= 0) {
             if (state.deathTimer === 0) {
@@ -473,10 +491,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             }
             state.deathTimer++;
             
-            // Slow motion during death
+            // Slow motion logic during death
             if (state.time % 2 === 0) {
-                draw(ctx, canvas); 
-                // Spawn explosions on dead char
                 const deadChar = state.p1.hp <= 0 ? state.p1 : state.p2;
                 createParticles(
                     deadChar.x + (Math.random()-0.5)*40, 
@@ -485,7 +501,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                 );
             }
             
-            // End game after ~1.5 seconds (90 frames)
             if (state.deathTimer > 90) {
                 state.gameEnded = true;
                 const winner = state.p1.hp > 0 ? p1 : (state.p2.hp > 0 ? p2 : null);
@@ -493,17 +508,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                     winner,
                     message: winner ? (winner.id === 'player1' ? "You have proved your strength!" : "The Legend remains supreme.") : "Double KO!",
                 });
-                return;
             }
-
-            requestRef.current = requestAnimationFrame(animate);
             return;
         }
 
         state.time++;
         if (state.screenShake > 0) state.screenShake *= 0.9;
-
-        // --- GAME LOGIC ---
 
         if (state.time % 600 === 0) spawnPowerUp(canvas.width, canvas.height);
 
@@ -522,8 +532,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             if (dist > 10) {
                 const force = 1000 / (dist + 50); // Stronger when closer
                 const angle = Math.atan2(dy, dx);
-                target.vx += Math.cos(angle) * force;
-                target.vy += Math.sin(angle) * force;
+                if (!isNaN(angle) && !isNaN(force)) {
+                    target.vx += Math.cos(angle) * force;
+                    target.vy += Math.sin(angle) * force;
+                }
             }
             
             // Damage if in center
@@ -552,8 +564,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
 
         // Effects Manager
         const manageEffects = (char: typeof state.p1, isPlayer: boolean) => {
-            char.speed = char.baseSpeed;
-            char.radius = char.baseRadius;
+            char.speed = char.baseSpeed || 5;
+            char.radius = char.baseRadius || 40;
             let damageMult = 1;
             let damageTakenMult = 1;
             let isFrozen = false;
@@ -583,12 +595,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                 }
                 if (effect.type === 'LOVELY') {
                     isLovely = true;
-                    // Heal tick
                     if (state.time % 10 === 0) {
                         char.hp = Math.min(char.maxHp, char.hp + 2);
                         if (isPlayer) setP1Health(char.hp); else setP2Health(char.hp);
                     }
-                    // Spawn hearts
                     if (state.time % 15 === 0) {
                         state.particles.push({
                             x: char.x, y: char.y - char.radius, 
@@ -612,7 +622,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         if (state.keys.ArrowLeft || state.keys.KeyA) moveX = -1;
         if (state.keys.ArrowRight || state.keys.KeyD) moveX = 1;
 
-        // Normalize diagonal movement
         if (moveX !== 0 || moveY !== 0) {
             const len = Math.sqrt(moveX*moveX + moveY*moveY);
             if (len > 0) {
@@ -621,13 +630,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             }
         }
 
-        state.p1.vx += moveX * state.p1.speed * 0.2; 
-        state.p1.vy += moveY * state.p1.speed * 0.2;
+        // NaN check on speed/movement
+        if (!isNaN(state.p1.speed)) {
+            state.p1.vx += moveX * state.p1.speed * 0.2; 
+            state.p1.vy += moveY * state.p1.speed * 0.2;
+        }
         state.p1.vx *= 0.85; 
         state.p1.vy *= 0.85;
 
-        state.p1.x += state.p1.vx;
-        state.p1.y += state.p1.vy;
+        // Apply velocity with NaN check
+        if (!isNaN(state.p1.vx)) state.p1.x += state.p1.vx;
+        if (!isNaN(state.p1.vy)) state.p1.y += state.p1.vy;
 
         // Boundaries
         state.p1.x = Math.max(state.p1.radius, Math.min(canvas.width - state.p1.radius, state.p1.x));
@@ -645,18 +658,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                 const dy = state.mouse.y - state.p1.y;
                 angle = Math.atan2(dy || 0, dx || 1);
             } else {
-                // Auto Aim at P2
                 angle = Math.atan2(state.p2.y - state.p1.y, state.p2.x - state.p1.x);
             }
+            if (isNaN(angle)) angle = 0;
 
             const vx = Math.cos(angle);
             const vy = Math.sin(angle);
+            const validVelocity = isNaN(bulletVelocity) ? 12 : bulletVelocity;
 
             state.bullets.push({
                 x: state.p1.x + vx * state.p1.radius,
                 y: state.p1.y + vy * state.p1.radius,
-                vx: vx * bulletVelocity, 
-                vy: vy * bulletVelocity,
+                vx: vx * validVelocity, 
+                vy: vy * validVelocity,
                 owner: 'p1',
                 dmg: (8 + (p1.stats.power * 0.8)) * p1Status.damageMult,
                 size: 10, 
@@ -678,8 +692,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
 
         if (dist > 350) {
             const angle = Math.atan2(dy, dx);
-            state.p2.vx += Math.cos(angle) * state.p2.speed * 0.1;
-            state.p2.vy += Math.sin(angle) * state.p2.speed * 0.1;
+            if (!isNaN(angle)) {
+                state.p2.vx += Math.cos(angle) * state.p2.speed * 0.1;
+                state.p2.vy += Math.sin(angle) * state.p2.speed * 0.1;
+            }
         } else {
             state.p2.vx += Math.sin(state.time * 0.05) * state.p2.speed * 0.15;
             state.p2.vy += Math.cos(state.time * 0.03) * state.p2.speed * 0.15;
@@ -687,46 +703,46 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         state.p2.vx *= 0.9;
         state.p2.vy *= 0.9;
         
-        state.p2.x += state.p2.vx;
-        state.p2.y += state.p2.vy;
+        if (!isNaN(state.p2.vx)) state.p2.x += state.p2.vx;
+        if (!isNaN(state.p2.vy)) state.p2.y += state.p2.vy;
         state.p2.x = Math.max(state.p2.radius, Math.min(canvas.width - state.p2.radius, state.p2.x));
         state.p2.y = Math.max(state.p2.radius, Math.min(canvas.height - state.p2.radius, state.p2.y));
 
         // P2 Shooting
         if (state.p2.cooldown > 0) state.p2.cooldown--;
         else {
-        const bossDmg = (5 + (p2.stats.power * 0.6)) * p2Status.damageMult;
-        if (state.time % 250 < 120) {
-            playSound('shoot');
-            const angle = Math.atan2(state.p1.y - state.p2.y, state.p1.x - state.p2.x);
-            state.bullets.push({
-            x: state.p2.x,
-            y: state.p2.y,
-            vx: Math.cos(angle) * 7,
-            vy: Math.sin(angle) * 7,
-            owner: 'p2',
-            dmg: bossDmg,
-            size: 8,
-            color: '#ef4444'
-            });
-            state.p2.cooldown = 35;
-        } else {
-            playSound('shoot');
-            for(let i=0; i<8; i++){
-                const angle = (i / 8) * Math.PI * 2;
+            const bossDmg = (5 + (p2.stats.power * 0.6)) * p2Status.damageMult;
+            if (state.time % 250 < 120) {
+                playSound('shoot');
+                const angle = Math.atan2(state.p1.y - state.p2.y, state.p1.x - state.p2.x);
                 state.bullets.push({
-                    x: state.p2.x,
-                    y: state.p2.y,
-                    vx: Math.cos(angle) * 5, 
-                    vy: Math.sin(angle) * 5,
-                    owner: 'p2',
-                    dmg: bossDmg * 0.8,
-                    size: 7,
-                    color: '#ef4444'
+                x: state.p2.x,
+                y: state.p2.y,
+                vx: Math.cos(angle) * 7,
+                vy: Math.sin(angle) * 7,
+                owner: 'p2',
+                dmg: bossDmg,
+                size: 8,
+                color: '#ef4444'
                 });
+                state.p2.cooldown = 35;
+            } else {
+                playSound('shoot');
+                for(let i=0; i<8; i++){
+                    const angle = (i / 8) * Math.PI * 2;
+                    state.bullets.push({
+                        x: state.p2.x,
+                        y: state.p2.y,
+                        vx: Math.cos(angle) * 5, 
+                        vy: Math.sin(angle) * 5,
+                        owner: 'p2',
+                        dmg: bossDmg * 0.8,
+                        size: 7,
+                        color: '#ef4444'
+                    });
+                }
+                state.p2.cooldown = 90;
             }
-            state.p2.cooldown = 90;
-        }
         }
 
         if (state.p2.specialCharge >= 100) fireSpecial(state.p2, 'p2', p2Status.damageMult);
@@ -755,20 +771,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
 
         // Particles & Text
         updateParticlesAndText(state);
-
-        draw(ctx, canvas);
-        requestRef.current = requestAnimationFrame(animate);
-
-    } catch (error) {
-        console.error("Game Loop Error:", error);
-        // Try to recover
-        requestRef.current = requestAnimationFrame(animate);
-    }
-  };
+  }
 
   const updateBullets = (canvas: HTMLCanvasElement, state: any, p1Status: any, p2Status: any) => {
       for (let i = state.bullets.length - 1; i >= 0; i--) {
         const b = state.bullets[i];
+        
+        if (isNaN(b.x) || isNaN(b.y)) {
+             state.bullets.splice(i, 1);
+             continue;
+        }
+
         b.x += b.vx;
         b.y += b.vy;
 
@@ -793,7 +806,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         
         // If PAL mode or Shield, damage might be ignored
         if (p1Status.isLovely || p2Status.isLovely) {
-            // Bullets just poof
             createParticles(b.x, b.y, '#f472b6', 5, 2);
             state.bullets.splice(i, 1);
             continue;
@@ -825,7 +837,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                     playSound('freeze');
                 }
                 
-                // If attacker has GOLD_MODE, slow on every hit
                 const attacker = b.owner === 'p1' ? state.p1 : state.p2;
                 const attackerStatus = b.owner === 'p1' ? p1Status : p2Status;
                 
@@ -850,7 +861,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             createParticles(b.x, b.y, b.color, b.isSpecial ? 40 : 10, b.isSpecial ? 3 : 2);
         }
 
-        // Remove bullet on hit
         if (hit) {
             state.bullets.splice(i, 1);
         }
@@ -877,7 +887,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     if (type === 'BLACK_HOLE') {
         playSound('void');
         addFloatingText(char.x, char.y - 50, "VOID OPENED!", '#9333ea', 'large');
-        // Spawn Black Hole at opponent's location
         const target = id === 'p1' ? gameState.current.p2 : gameState.current.p1;
         gameState.current.blackHoles.push({
             x: target.x,
@@ -904,6 +913,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
   };
 
   const createParticles = (x: number, y: number, color: string, count: number, sizeBase: number) => {
+    if (isNaN(x) || isNaN(y)) return;
     for (let i = 0; i < count; i++) {
       gameState.current.particles.push({
         x, y,
@@ -927,7 +937,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         ctx.translate(dx, dy);
     }
 
-    // Clear
+    // Background
     ctx.fillStyle = '#09090b';
     ctx.fillRect(-20, -20, canvas.width + 40, canvas.height + 40); 
     
@@ -960,7 +970,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         ctx.restore();
     });
 
-    // Mouse Aim Indicator (Crosshair) - Only if MANUAL and playing
+    // Mouse Aim Indicator
     if (!state.gameEnded && !isPausedRef.current && aimMode === 'MANUAL') {
         ctx.strokeStyle = 'rgba(168, 85, 247, 0.5)';
         ctx.lineWidth = 1;
@@ -972,7 +982,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         ctx.lineTo(state.mouse.x, state.mouse.y + 15);
         ctx.stroke();
         
-        // Aim Line
         ctx.beginPath();
         ctx.setLineDash([5, 5]);
         ctx.moveTo(state.p1.x, state.p1.y);
@@ -980,7 +989,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         ctx.stroke();
         ctx.setLineDash([]);
     } else if (aimMode === 'AUTO' && !state.gameEnded) {
-        // Auto Aim Visual
         ctx.strokeStyle = 'rgba(168, 85, 247, 0.2)';
         ctx.setLineDash([2, 4]);
         ctx.beginPath();
@@ -993,36 +1001,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     // Particles
     state.particles.forEach(p => {
       ctx.fillStyle = p.color;
-      ctx.globalAlpha = Math.max(0, p.life / 30); // Prevent negative alpha
+      ctx.globalAlpha = Math.max(0, p.life / 30);
       if (p.isHeart) {
-          // Draw Heart
           ctx.beginPath();
           const topCurveHeight = p.size * 0.3;
           ctx.moveTo(p.x, p.y + topCurveHeight);
-          // top left curve
-          ctx.bezierCurveTo(
-            p.x, p.y, 
-            p.x - p.size / 2, p.y, 
-            p.x - p.size / 2, p.y + topCurveHeight
-          );
-          // bottom left curve
-          ctx.bezierCurveTo(
-            p.x - p.size / 2, p.y + (p.size + topCurveHeight) / 2, 
-            p.x, p.y + (p.size + topCurveHeight) / 2, 
-            p.x, p.y + p.size
-          );
-          // bottom right curve
-          ctx.bezierCurveTo(
-            p.x, p.y + (p.size + topCurveHeight) / 2, 
-            p.x + p.size / 2, p.y + (p.size + topCurveHeight) / 2, 
-            p.x + p.size / 2, p.y + topCurveHeight
-          );
-          // top right curve
-          ctx.bezierCurveTo(
-            p.x + p.size / 2, p.y, 
-            p.x, p.y, 
-            p.x, p.y + topCurveHeight
-          );
+          ctx.bezierCurveTo(p.x, p.y, p.x - p.size / 2, p.y, p.x - p.size / 2, p.y + topCurveHeight);
+          ctx.bezierCurveTo(p.x - p.size / 2, p.y + (p.size + topCurveHeight) / 2, p.x, p.y + (p.size + topCurveHeight) / 2, p.x, p.y + p.size);
+          ctx.bezierCurveTo(p.x, p.y + (p.size + topCurveHeight) / 2, p.x + p.size / 2, p.y + (p.size + topCurveHeight) / 2, p.x + p.size / 2, p.y + topCurveHeight);
+          ctx.bezierCurveTo(p.x + p.size / 2, p.y, p.x, p.y, p.x, p.y + topCurveHeight);
           ctx.fill();
       } else {
           ctx.beginPath();
@@ -1037,13 +1024,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.rotation);
-        const colors = { HEAL: '#22c55e', SPEED: '#3b82f6', POWER: '#ef4444', BLACK_HOLE: '#9333ea' };
-        ctx.shadowColor = colors[p.type];
+        const colors: Record<string, string> = { HEAL: '#22c55e', SPEED: '#3b82f6', POWER: '#ef4444', BLACK_HOLE: '#9333ea' };
+        ctx.shadowColor = colors[p.type] || '#fff';
         ctx.shadowBlur = 15;
-        ctx.fillStyle = colors[p.type];
+        ctx.fillStyle = colors[p.type] || '#fff';
         
         ctx.beginPath();
-        
         if (p.type === 'BLACK_HOLE') {
             ctx.arc(0, 0, p.radius, 0, Math.PI*2);
             ctx.fill();
@@ -1058,7 +1044,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             ctx.fill();
         }
         ctx.closePath();
-        
         ctx.restore();
     });
 
@@ -1072,7 +1057,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
           try {
               ctx.drawImage(b.img, -b.size, -b.size, b.size * 2, b.size * 2);
           } catch(e) {
-              // Fallback
               ctx.fillStyle = b.color;
               ctx.beginPath(); ctx.arc(0,0,b.size,0,Math.PI*2); ctx.fill();
           }
@@ -1107,7 +1091,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
   };
 
   const drawCharacter = (ctx: CanvasRenderingContext2D, char: any, glowColor: string, time: number) => {
-    // If dead, fade out
+    // Check if dead
     if (char.hp <= 0) {
         ctx.globalAlpha = Math.max(0, 1 - gameState.current.deathTimer / 60);
     }
@@ -1133,13 +1117,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
 
     ctx.translate(char.x, char.y);
 
-    // Visual Scaling for Giant Mode
     if (isGiant) {
         const scale = 1.5;
         ctx.scale(scale, scale);
     }
 
-    // Shield Visual
     if (isShielded) {
         ctx.beginPath();
         ctx.arc(0, 0, char.radius + 15, 0, Math.PI*2);
@@ -1174,6 +1156,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     ctx.shadowColor = glowColor;
     ctx.shadowBlur = 20;
     
+    // IMAGE DRAWING - SAFEGUARDED
     ctx.save();
     ctx.clip();
     
@@ -1185,17 +1168,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         ctx.fillRect(-char.radius, -char.radius, char.radius * 2, char.radius * 2);
     } else {
         try {
-            // Draw image or fill if not ready
             if (char.img.complete && char.img.naturalWidth !== 0) {
                 ctx.drawImage(char.img, -char.radius, -char.radius, char.radius * 2, char.radius * 2);
             } else {
-                throw new Error("Image not ready");
+                 throw new Error("Img not ready");
             }
             
-            // Overlays
             if (isTough) {
                 ctx.globalCompositeOperation = 'saturation';
-                ctx.fillStyle = '#94a3b8'; // Desaturate for iron look
+                ctx.fillStyle = '#94a3b8'; 
                 ctx.fillRect(-char.radius, -char.radius, char.radius * 2, char.radius * 2);
                 ctx.globalCompositeOperation = 'source-over';
             }
@@ -1216,7 +1197,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         ctx.fillRect(-char.radius, -char.radius, char.radius * 2, char.radius * 2);
     }
 
-    ctx.restore();
+    ctx.restore(); // Restore clip
+    
     ctx.strokeStyle = glowColor;
     ctx.lineWidth = 3;
     ctx.stroke();
@@ -1233,7 +1215,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     ctx.fillStyle = '#eab308';
     ctx.fillRect(-30, -char.radius - 12, 60 * spPct, 4);
     
-    ctx.restore();
+    ctx.restore(); // Restore translate
     ctx.globalAlpha = 1;
   };
 
