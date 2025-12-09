@@ -411,17 +411,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
      const specialId: SpecialId = isP1 ? (p1.specialId || 'GMASTI') : (p2.specialId || '6FTBADDIE');
      const displayName = isP1 ? p1.stats.specialMove : p2.stats.specialMove;
 
-     // GT MODE CHECK FIRST (Cost Logic)
+     // GT MODE CHECK FIRST (Cost REMOVED, Free to use)
      if (specialId === 'GT_MODE') {
-         if (char.hp < 10) return; // Cannot sacrifice last bit of life
-         
-         // Pay the price
-         const sacrifice = Math.floor(char.hp / 2);
-         char.hp -= sacrifice;
-         if (isP1) setP1Health(char.hp); else setP2Health(char.hp);
-         
-         // Visuals
-         addFloatingText(char.x, char.y - 90, `SACRIFICE -${sacrifice} HP`, '#ef4444', 'large');
+         // No HP Cost
          addFloatingText(char.x, char.y - 60, "GT OVERDRIVE!", '#a855f7', 'large');
          playSound('void');
          
@@ -485,7 +477,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
              if (specialId === 'SONI') {
                 char.effects.push({ type: 'GOLD_MODE', duration: 300 }); // 5s
                 playSound('powerup');
-                addFloatingText(char.x, char.y - 90, "GOD MODE + VOID BEAM", '#facc15', 'large');
+                addFloatingText(char.x, char.y - 90, "OVERPOWERED GOD", '#facc15', 'large');
              }
              // Also fires the VOID BEAM (Fallthrough to projectile logic, but we override props)
              // Fallthrough
@@ -755,8 +747,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                     char.speed *= 2.5; // UPDATED: 2.5x Speed
                     isShielded = true; 
                     isGold = true;
-                    if (state.time % 10 === 0) { // Regen
-                        char.hp = Math.min(char.maxHp, char.hp + 2);
+                    // SUPER REGEN for Soni Overpowered
+                    if (state.time % 10 === 0) { 
+                        char.hp = Math.min(char.maxHp, char.hp + 5);
                         if(isPlayer) setP1Health(char.hp); else setP2Health(char.hp);
                     }
                 }

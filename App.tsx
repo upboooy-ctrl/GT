@@ -19,6 +19,10 @@ const App: React.FC = () => {
   const [bulletVelocity, setBulletVelocity] = useState(12);
   const [difficulty, setDifficulty] = useState(1);
 
+  // Economy State
+  const [coins, setCoins] = useState<number>(0);
+  const [unlockedAbilities, setUnlockedAbilities] = useState<SpecialId[]>(['GMASTI']); // Default unlocked
+
   // Multiplayer State
   const [mpConfig, setMpConfig] = useState<MultiplayerConfig | null>(null);
   const [myPeerId, setMyPeerId] = useState<string>('');
@@ -28,12 +32,37 @@ const App: React.FC = () => {
   const [isHost, setIsHost] = useState(false);
   const [localP1DataForMp, setLocalP1DataForMp] = useState<any>(null);
 
-  // Initial Cleanup
+  // Initial Cleanup & Load Data
   useEffect(() => {
+    // Load Coins and Unlocked items
+    const savedCoins = localStorage.getItem('gt_legends_coins');
+    const savedAbilities = localStorage.getItem('gt_legends_abilities');
+
+    if (savedCoins) setCoins(parseInt(savedCoins));
+    else setCoins(100); // Starter bonus
+
+    if (savedAbilities) setUnlockedAbilities(JSON.parse(savedAbilities));
+    else setUnlockedAbilities(['GMASTI']);
+
     return () => {
         if (peerRef.current) peerRef.current.destroy();
     };
   }, []);
+
+  // Save Data on Change
+  useEffect(() => {
+      localStorage.setItem('gt_legends_coins', coins.toString());
+      localStorage.setItem('gt_legends_abilities', JSON.stringify(unlockedAbilities));
+  }, [coins, unlockedAbilities]);
+
+  const handleBuyAbility = (id: SpecialId, cost: number) => {
+      if (coins >= cost && !unlockedAbilities.includes(id)) {
+          setCoins(prev => prev - cost);
+          setUnlockedAbilities(prev => [...prev, id]);
+          return true;
+      }
+      return false;
+  };
 
   const handleImagesReady = async (
     img1: string, 
@@ -101,6 +130,17 @@ const App: React.FC = () => {
   const handleGameOver = (result: GameResult) => {
     setGameResult(result);
     setAppState(AppState.GAME_OVER);
+    
+    // Award Coins
+    let earned = 0;
+    if (result.winner?.id === 'player1') {
+        earned = 100 * difficulty; // More coins for harder difficulties
+    } else {
+        earned = 25; // Participation trophy
+    }
+    
+    // Animation/Sound for coins could go here
+    setCoins(prev => prev + Math.floor(earned));
   };
 
   const handleReset = () => {
@@ -250,13 +290,23 @@ const App: React.FC = () => {
         <h1 className="text-xl font-bold font-cinzel text-white/80 tracking-widest pointer-events-auto shadow-black drop-shadow-md">
           LEGENDS <span className="text-purple-500">OF</span> GT
         </h1>
+        <div className="pointer-events-auto bg-slate-900/80 backdrop-blur border border-yellow-500/30 px-4 py-1 rounded-full flex items-center gap-2 shadow-lg">
+            <span className="text-yellow-400 text-lg">🪙</span>
+            <span className="font-bold font-mono text-yellow-100">{coins}</span>
+        </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col items-center justify-center min-h-screen">
+      <main className="flex-1 flex flex-col items-center justify-center min-h-screen pt-16">
         
         {appState === AppState.UPLOAD && (
-          <UploadSection onImagesReady={handleImagesReady} onMultiplayerRequest={handleMultiplayerRequest} />
+          <UploadSection 
+            onImagesReady={handleImagesReady} 
+            onMultiplayerRequest={handleMultiplayerRequest} 
+            coins={coins}
+            unlockedAbilities={unlockedAbilities}
+            onBuyAbility={handleBuyAbility}
+          />
         )}
 
         {appState === AppState.LOBBY && (
@@ -334,7 +384,14 @@ const App: React.FC = () => {
                 GT Ki Maa Kunal
             </p>
 
-            <p className="text-xl text-purple-300 mb-8">{gameResult.message}</p>
+            <p className="text-xl text-purple-300 mb-6">{gameResult.message}</p>
+            
+            <div className="mb-6 bg-yellow-500/10 border border-yellow-500/50 p-4 rounded-lg flex flex-col items-center gap-1 animate-bounce-slow">
+                <span className="text-yellow-400 font-bold uppercase text-xs tracking-widest">Rewards</span>
+                <span className="text-3xl font-mono font-bold text-white flex items-center gap-2">
+                    +{gameResult.winner?.id === 'player1' ? (100 * difficulty) : 25} 🪙
+                </span>
+            </div>
             
             {gameResult.winner && (
                <div className="mb-8 relative">
@@ -355,7 +412,7 @@ const App: React.FC = () => {
                     Rematch
                 </Button>
                 <Button onClick={handleReset} variant="secondary">
-                    New Battle
+                    New Battle (Shop)
                 </Button>
             </div>
           </div>

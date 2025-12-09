@@ -18,27 +18,36 @@ interface UploadSectionProps {
     allowedPowerUps: PowerUpType[],
     bulletVelocity: number
   ) => void;
-  onMultiplayerRequest: (p1Data: any) => void; // New callback for multiplayer setup
+  onMultiplayerRequest: (p1Data: any) => void;
+  coins: number;
+  unlockedAbilities: SpecialId[];
+  onBuyAbility: (id: SpecialId, cost: number) => boolean;
 }
 
-const DEFAULT_AVATAR_P1 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIiBmaWxsPSJub25lIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ3JhZDEiIHgxPSIwIiB5MT0iMCIgeDI9IjIwMCIgeTI9IjIwMCI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiM2MzY2ZjEiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2E4NTVmNyIgLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSJ1cmwoI2dyYWQxKSIgcng9IjIwIiAvPgogIDxjaXJjbGUgY3g9IjEwMCIgY3k9IjgwIiByPSI1MCIgZmlsbD0iIzFmMjkzNyIgLz4KICA8cGF0aCBkPSJNMTAwIDE0MCBDNjAgMTQwIDMwIDIwMCAzMCAyMDAgTDE3MCAyMDAgQzE3MCAyMDAgMTQwIDE0MCAxMDAgMTQwIFoiIGZpbGw9IiMxZjI5MzciIC8+CiAgPGNpcmNsZSBjeT0iODAiIGN5PSI3MCIgcj0iNSIgZmlsbD0iIzYwYWFmNiIgLz4KICA8cGF0aCBkPSJNNzAgOTAgUTEwMCAxMTAgMTMwIDkwIiBzdHJva2U9IiM2MGFhZjYiIHN0cm9rZS13aWR0aD0iMyIgZmlsbD0ibm9uZSIgLz4KPC9zdmc+";
+const DEFAULT_AVATAR_P1 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIiBmaWxsPSJub25lIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ3JhZDEiIHgxPSIwIiB5MT0iMCIgeDI9IjIwMCIgeTI9IjIwMCI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmNDcyYjYiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2RiMjdlNyIgLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSJ1cmwoI2dyYWQxKSIgcng9IjIwIiAvPgogIDxjaXJjbGUgY3g9IjEwMCIgY3k9IjgwIiByPSI1MCIgZmlsbD0iIzFmMjkzNyIgLz4KICA8cGF0aCBkPSJNMTAwIDE0MCBDNjAgMTQwIDMwIDIwMCAzMCAyMDAgTDE3MCAyMDAgQzE3MCAyMDAgMTQwIDE0MCAxMDAgMTQwIFoiIGZpbGw9IiMxZjI5MzciIC8+CiAgPGNpcmNsZSBjeT0iODAiIGN5PSI3MCIgcj0iNSIgZmlsbD0iI2ZmZmZmZiIgLz4KICA8Y2lyY2xlIGN4PSIxMjAiIGN5PSI3MCIgcj0iNSIgZmlsbD0iI2ZmZmZmZiIgLz4KICA8cGF0aCBkPSJNNzAgMTAwIFExMDAgMTMwIDEzMCAxMDAiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIzIiBmaWxsPSJub25lIiAvPgo8L3N2Zz4=";
 
-const DEFAULT_AVATAR_P2 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIiBmaWxsPSJub25lIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ3JhZDIiIHgxPSIwIiB5MT0iMCIgeDI9IjIwMCIgeTI9IjIwMCI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmNDNmNWUiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y1OWUwYiIgLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSJ1cmwoI2dyYWQyKSIgcng9IjIwIiAvPgogIDxjaXJjbGUgY3g9IjEwMCIgY3k9IjgwIiByPSI1MCIgZmlsbD0iIzFmMjkzNyIgLz4KICA8cGF0aCBkPSJNMTAwIDE0MCBDNjAgMTQwIDMwIDIwMCAzMCAyMDAgTDE3MCAyMDAgQzE3MCAyMDAgMTQwIDE0MCAxMDAgMTQwIFoiIGZpbGw9IiMxZjI5MzciIC8+CiAgPGNpcmNsZSBjeT0iODAiIGN5PSI3MCIgcj0iNSIgZmlsbD0iI2ZjYTVhNSIgLz4KICA8Y2lyY2xlIGN4PSIxMjAiIGN5PSI3MCIgcj0iNSIgZmlsbD0iI2ZjYTVhNSIgLz4KICA8cGF0aCBkPSJNNzAgMTAwIFExMDAgODAgMTMwIDEwMCIgc3Ryb2tlPSIjZmNhNWE1IiBzdHJva2Utd2lkdGg9IjMiIGZpbGw9Im5vbmUiIC8+Cjwvc3ZnPg==";
+const DEFAULT_AVATAR_P2 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIiBmaWxsPSJub25lIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ3JhZDIiIHgxPSIwIiB5MT0iMCIgeDI9IjIwMCIgeTI9IjIwMCI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMwNjRZTNiIiAvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwMjJjMjIiIC8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0idXJsKCNncmFkMikiIHJ4PSIyMCIgLz4KICA8Y2lyY2xlIGN4PSIxMDAiIGN5PSI4MCIgcj0iNTAiIGZpbGw9IiMxZjI5MzciIC8+CiAgPHBhdGggZD0iTTEwMCAxNDAgQzYwIDE0MCAzMCAyMDAgMzAgMjAwIEwxNzAgMjAwIEMxNzAgMjAwIDE0MCAxNDAgMTAwIDE0MCBaIiBmaWxsPSIjMWYyOTM3IiAvPgogIDxjaXJjbGUgY3g9IjgwIiBjeT0iNzAiIHI9IjUiIGZpbGw9IiNmY2E1YTUiIC8+CiAgPGNpcmNsZSBjeT0iMTIwIiBjeT0iNzAiIHI9IjUiIGZpbGw9IiNmY2E1YTUiIC8+CiAgPHBhdGggZD0iTTcwIDEwMCBRMTAwIDkwIDEzMCAxMDAiIHN0cm9rZT0iI2ZjYTVhNSIgc3Ryb2tlLXdpZHRoPSIzIiBmaWxsPSJub25lIiAvPgo8L3N2Zz4=";
 
-const POWER_OPTIONS: {id: SpecialId, label: string, desc: string}[] = [
-    { id: 'GMASTI', label: 'Gmasti (Fireball)', desc: 'Shoots a massive fireball. Simple, high damage.' },
-    { id: '6FTBADDIE', label: '6Ft Baddie (Ice)', desc: 'Fires an Ice Bolt. Freezes and slows the opponent.' },
-    { id: 'ROHANMOB', label: 'Rohan Mob (Shield)', desc: 'White Shield: Grants Total Invulnerability for 5s.' },
-    { id: 'LAMBARDAAR', label: 'Lambardaar (Giant)', desc: 'HEALS 50 HP + Giant Size + 1.25x Damage.' },
-    { id: 'SINGH', label: 'Singh (Tuff)', desc: 'Immortal Will: 90% Dmg Reduc + 2x Dmg + Regen.' },
-    { id: 'SONI', label: 'Soni (God Mode)', desc: 'BROKEN: Touch=1/2 HP + Void Beam + God Mode.' },
-    { id: 'PAL', label: 'Pal (Lovely)', desc: 'Peace Mode. No damage dealt. Both players Heal.' },
-    { id: 'MANAN', label: 'Manan (Curse)', desc: 'Beam Attack. Curses Enemy (-10HP/s). You Shrink.' },
-    { id: 'ABHAY', label: 'Abhay (Magnet)', desc: 'Gravity Well: Pulls opponent in & deals contact dmg.' },
-    { id: 'GT_MODE', label: 'GT Mode (Ultimate)', desc: 'Sacrifice 50% HP. 3-Way Spread Shot + God Speed.' },
+const POWER_OPTIONS: {id: SpecialId, label: string, desc: string, price: number}[] = [
+    { id: 'GMASTI', label: 'Gmasti (Fireball)', desc: 'Shoots a massive fireball. Simple, high damage.', price: 0 },
+    { id: '6FTBADDIE', label: '6Ft Baddie (Ice)', desc: 'Fires an Ice Bolt. Freezes and slows the opponent.', price: 100 },
+    { id: 'ROHANMOB', label: 'Rohan Mob (Shield)', desc: 'White Shield: Grants Total Invulnerability for 5s.', price: 200 },
+    { id: 'LAMBARDAAR', label: 'Lambardaar (Giant)', desc: 'HEALS 50 HP + Giant Size + 1.25x Damage.', price: 300 },
+    { id: 'SINGH', label: 'Singh (Tuff)', desc: 'Immortal Will: 90% Dmg Reduc + 2x Dmg + Regen.', price: 400 },
+    { id: 'ABHAY', label: 'Abhay (Magnet)', desc: 'Gravity Well: Pulls opponent in & deals contact dmg.', price: 500 },
+    { id: 'MANAN', label: 'Manan (Curse)', desc: 'Beam Attack. Curses Enemy (-10HP/s). You Shrink.', price: 600 },
+    { id: 'PAL', label: 'Pal (Lovely)', desc: 'Peace Mode. No damage dealt. Both players Heal.', price: 700 },
+    { id: 'GT_MODE', label: 'GT Mode (Ultimate)', desc: 'UNLEASHED: Rapid Fire + 3-Way Shot + 2x Speed.', price: 800 },
+    { id: 'SONI', label: 'Soni (God Mode)', desc: 'BROKEN: Touch=1/2 HP + Void Beam + God Mode.', price: 1000 },
 ];
 
-export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onMultiplayerRequest }) => {
+export const UploadSection: React.FC<UploadSectionProps> = ({ 
+    onImagesReady, 
+    onMultiplayerRequest, 
+    coins, 
+    unlockedAbilities, 
+    onBuyAbility 
+}) => {
   const [img1, setImg1] = useState<string | null>(null);
   const [img2, setImg2] = useState<string | null>(null);
   const [bulletImg, setBulletImg] = useState<string | null>(null);
@@ -72,7 +81,6 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onM
         setError(null);
       };
       reader.readAsDataURL(file);
-      // Reset input value to allow re-selection of same file
       e.target.value = '';
     }
   };
@@ -103,11 +111,14 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onM
       setSelectedPowerUps(newSet);
   };
 
-  const handleStart = () => {
-    // This function is effectively replaced by the button clicks calling onImagesReady directly or via wrapper
-  };
+  const isAbilityLocked = (id: SpecialId) => !unlockedAbilities.includes(id);
 
   const handleStartWithDifficulty = () => {
+      if(isAbilityLocked(p1SpecialId)) {
+          setError(`Unlock Player 1's ability (${p1SpecialId}) first!`);
+          return;
+      }
+
       if (img1 && img2) {
           // @ts-ignore
           onImagesReady(img1, img2, bulletImg, p1SpecialName, p2SpecialName, p1SpecialId, p2SpecialId, p1Name, p2Name, aimMode, initialHp, Array.from(selectedPowerUps), bulletVelocity, difficulty);
@@ -117,6 +128,11 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onM
   }
 
   const handlePlayOnline = () => {
+      if(isAbilityLocked(p1SpecialId)) {
+          setError(`Unlock your ability (${p1SpecialId}) first!`);
+          return;
+      }
+
       if (!img1) {
           setError("Please upload YOUR fighter (Player 1) to play online.");
           return;
@@ -134,8 +150,20 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onM
       onMultiplayerRequest(p1Data);
   };
 
+  const attemptBuy = (id: SpecialId) => {
+      const opt = POWER_OPTIONS.find(o => o.id === id);
+      if(!opt) return;
+      
+      const success = onBuyAbility(id, opt.price);
+      if (!success) {
+          setError(`Not enough coins! Need ${opt.price}, have ${coins}.`);
+      } else {
+          setError(null);
+      }
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] w-full max-w-6xl mx-auto p-6 animate-fade-in">
+    <div className="flex flex-col items-center justify-center min-h-[60vh] w-full max-w-6xl mx-auto p-6 animate-fade-in pb-20">
       <div className="text-center mb-10">
         <h2 className="text-4xl md:text-6xl font-cinzel font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 mb-4 drop-shadow-lg">
           CHOOSE YOUR LEGENDS
@@ -191,21 +219,37 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onM
                     />
                 </div>
                 <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Special Power Type</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase flex justify-between">
+                        <span>Special Power Type</span>
+                        {isAbilityLocked(p1SpecialId) && <span className="text-red-400">🔒 LOCKED</span>}
+                    </label>
                     <select 
                         value={p1SpecialId} 
                         onChange={(e) => {
                             setP1SpecialId(e.target.value as SpecialId);
-                            // Auto update name if still default
                             const opt = POWER_OPTIONS.find(o => o.id === e.target.value);
                             if(opt) setP1SpecialName(opt.label.split(' (')[0]);
                         }}
-                        className="bg-slate-800 border border-slate-600 rounded p-2 text-white text-sm focus:border-purple-500 focus:outline-none"
+                        className={`bg-slate-800 border rounded p-2 text-white text-sm focus:outline-none ${isAbilityLocked(p1SpecialId) ? 'border-red-500 text-red-100' : 'border-slate-600 focus:border-purple-500'}`}
                     >
                         {POWER_OPTIONS.map(opt => (
-                            <option key={opt.id} value={opt.id}>{opt.label}</option>
+                            <option key={opt.id} value={opt.id}>
+                                {isAbilityLocked(opt.id) ? `🔒 ${opt.label} (${opt.price})` : `✅ ${opt.label}`}
+                            </option>
                         ))}
                     </select>
+                    
+                    {isAbilityLocked(p1SpecialId) && (
+                        <div className="mt-1">
+                            <button 
+                                onClick={() => attemptBuy(p1SpecialId)}
+                                className="w-full bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold py-1 px-2 rounded flex items-center justify-center gap-2"
+                            >
+                                <span>🛒 Unlock for {POWER_OPTIONS.find(o=>o.id===p1SpecialId)?.price}</span>
+                            </button>
+                        </div>
+                    )}
+                    
                      <p className="text-[10px] text-slate-400 italic leading-tight mt-1">{POWER_OPTIONS.find(o => o.id === p1SpecialId)?.desc}</p>
                 </div>
                 <div className="flex flex-col gap-1">
@@ -433,10 +477,10 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onM
       )}
 
       <div className="flex gap-4">
-        <Button onClick={handleStartWithDifficulty} disabled={!img1 || !img2} className="w-full md:w-auto text-xl py-4 flex-1">
+        <Button onClick={handleStartWithDifficulty} disabled={!img1 || !img2 || !!error} className="w-full md:w-auto text-xl py-4 flex-1">
             Play Local 1v1
         </Button>
-        <Button onClick={handlePlayOnline} disabled={!img1} variant="secondary" className="w-full md:w-auto text-xl py-4 flex-1 border-blue-500 text-blue-300">
+        <Button onClick={handlePlayOnline} disabled={!img1 || !!error} variant="secondary" className="w-full md:w-auto text-xl py-4 flex-1 border-blue-500 text-blue-300">
             Play Online (Multiplayer)
         </Button>
       </div>
