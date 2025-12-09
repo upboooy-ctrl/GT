@@ -24,42 +24,8 @@ export async function analyzeFighters(
   // Clean base64 strings if they contain headers
   const cleanBase64 = (str: string) => str.replace(/^data:image\/\w+;base64,/, "");
 
-  // Fallback stats function
-  const getFallbackStats = () => ({
-      player1: {
-        name: "Challenger",
-        title: "The Unknown",
-        description: "A mysterious warrior ready for battle.",
-        hp: 120,
-        speed: 6,
-        power: 6,
-        specialMove: "Rising Strike",
-        quote: "Actions speak louder.",
-      },
-      player2: {
-        name: "The Boss",
-        title: "The Gatekeeper",
-        description: "An imposing figure blocking the path.",
-        hp: 130,
-        speed: 5,
-        power: 8,
-        specialMove: "Cataclysm",
-        quote: "You are not prepared.",
-      },
-  });
-
   try {
-    // Robust check for API key availability that works in browser environments
-    const apiKey = typeof process !== 'undefined' && process.env ? process.env.API_KEY : undefined;
-
-    if (!apiKey) {
-        console.warn("API_KEY is missing. Using fallback stats.");
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        return getFallbackStats();
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: {
@@ -104,6 +70,28 @@ export async function analyzeFighters(
     return JSON.parse(jsonText);
   } catch (error) {
     console.error("Gemini Analysis Failed:", error);
-    return getFallbackStats();
+    // Fallback stats if API fails
+    return {
+      player1: {
+        name: "Challenger",
+        title: "The Unknown",
+        description: "A mysterious warrior.",
+        hp: 100,
+        speed: 5,
+        power: 5,
+        specialMove: "Basic Punch",
+        quote: "Let's do this.",
+      },
+      player2: {
+        name: "The Boss",
+        title: "The Honoured One",
+        description: "Standing at the pinnacle.",
+        hp: 120,
+        speed: 6,
+        power: 7,
+        specialMove: "Infinite Void",
+        quote: "You are weak.",
+      },
+    };
   }
 }

@@ -411,9 +411,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
      const specialId: SpecialId = isP1 ? (p1.specialId || 'GMASTI') : (p2.specialId || '6FTBADDIE');
      const displayName = isP1 ? p1.stats.specialMove : p2.stats.specialMove;
 
-     // GT MODE CHECK FIRST
+     // GT MODE CHECK FIRST (Cost Logic)
      if (specialId === 'GT_MODE') {
-         // REMOVED LIMITATIONS: No HP Cost, No Min HP check
+         if (char.hp < 10) return; // Cannot sacrifice last bit of life
+         
+         // Pay the price
+         const sacrifice = Math.floor(char.hp / 2);
+         char.hp -= sacrifice;
+         if (isP1) setP1Health(char.hp); else setP2Health(char.hp);
+         
+         // Visuals
+         addFloatingText(char.x, char.y - 90, `SACRIFICE -${sacrifice} HP`, '#ef4444', 'large');
          addFloatingText(char.x, char.y - 60, "GT OVERDRIVE!", '#a855f7', 'large');
          playSound('void');
          
@@ -441,7 +449,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
          
          case 'LAMBARDAAR': // Giant
              char.effects.push({ type: 'GIANT', duration: 600 }); // 10s
-             // Heal on activation
+             // NEW: Heal on activation
              char.hp = Math.min(char.maxHp, char.hp + 50);
              if (isP1) setP1Health(char.hp); else setP2Health(char.hp);
              
@@ -740,11 +748,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                 }
                 if (effect.type === 'GIANT') {
                     char.radius = char.baseRadius * 2;
-                    damageMult *= 1.25; 
+                    damageMult *= 1.25; // UPDATED to 1.25x
                 }
                 if (effect.type === 'GOLD_MODE') {
-                    damageMult *= 5; 
-                    char.speed *= 2.5; 
+                    damageMult *= 5; // UPDATED: 5x Damage (Overpowered)
+                    char.speed *= 2.5; // UPDATED: 2.5x Speed
                     isShielded = true; 
                     isGold = true;
                     if (state.time % 10 === 0) { // Regen
