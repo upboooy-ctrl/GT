@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { UploadSection } from './components/UploadSection';
 import { VersusScreen } from './components/VersusScreen';
@@ -6,19 +7,36 @@ import { analyzeFighters } from './services/geminiService';
 import { AppState, FighterData, GameResult, PowerUpType, SpecialId, MultiplayerConfig } from './types';
 import { Button } from './components/Button';
 
+// Initial Form State
+const INITIAL_FORM_DATA = {
+    img1: null as string | null,
+    img2: null as string | null,
+    bulletImg: null as string | null,
+    p1Name: "",
+    p2Name: "",
+    p1SpecialName: "GMASTI",
+    p2SpecialName: "6FTBADDIE",
+    p1SpecialId: 'GMASTI' as SpecialId,
+    p2SpecialId: '6FTBADDIE' as SpecialId,
+    aimMode: 'MANUAL' as 'MANUAL' | 'AUTO',
+    initialHp: 150,
+    difficulty: 1,
+    bulletVelocity: 12,
+    selectedPowerUps: new Set(['HEAL', 'SPEED', 'POWER', 'BLACK_HOLE']) as Set<PowerUpType>
+};
+
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.UPLOAD);
+  
+  // Persistent Form Data
+  const [formData, setFormData] = useState(INITIAL_FORM_DATA);
+
   const [p1Data, setP1Data] = useState<FighterData | null>(null);
   const [p2Data, setP2Data] = useState<FighterData | null>(null);
-  const [customBullet, setCustomBullet] = useState<string | null>(null);
   const [gameResult, setGameResult] = useState<GameResult | null>(null);
   const [loadingText, setLoadingText] = useState("Summoning the spirits...");
   const [gameId, setGameId] = useState(0); 
-  const [aimMode, setAimMode] = useState<'MANUAL' | 'AUTO'>('MANUAL');
-  const [allowedPowerUps, setAllowedPowerUps] = useState<PowerUpType[]>([]);
-  const [bulletVelocity, setBulletVelocity] = useState(12);
-  const [difficulty, setDifficulty] = useState(1);
-
+  
   // Economy State
   const [coins, setCoins] = useState<number>(0);
   const [unlockedAbilities, setUnlockedAbilities] = useState<SpecialId[]>(['GMASTI']); // Default unlocked
@@ -37,12 +55,26 @@ const App: React.FC = () => {
     // Load Coins and Unlocked items
     const savedCoins = localStorage.getItem('gt_legends_coins');
     const savedAbilities = localStorage.getItem('gt_legends_abilities');
+    const savedFormData = localStorage.getItem('gt_legends_form_data');
 
     if (savedCoins) setCoins(parseInt(savedCoins));
     else setCoins(100); // Starter bonus
 
     if (savedAbilities) setUnlockedAbilities(JSON.parse(savedAbilities));
     else setUnlockedAbilities(['GMASTI']);
+
+    if (savedFormData) {
+        try {
+            const parsed = JSON.parse(savedFormData);
+            // Rehydrate Set for selectedPowerUps
+            if (parsed.selectedPowerUps) {
+                parsed.selectedPowerUps = new Set(parsed.selectedPowerUps);
+            }
+            setFormData(prev => ({ ...prev, ...parsed }));
+        } catch(e) {
+            console.error("Failed to load saved form data", e);
+        }
+    }
 
     return () => {
         if (peerRef.current) peerRef.current.destroy();
@@ -55,6 +87,19 @@ const App: React.FC = () => {
       localStorage.setItem('gt_legends_abilities', JSON.stringify(unlockedAbilities));
   }, [coins, unlockedAbilities]);
 
+  // Save Form Data on Change (Debounced)
+  useEffect(() => {
+      const timer = setTimeout(() => {
+        try {
+            const toSave = { ...formData, selectedPowerUps: Array.from(formData.selectedPowerUps) };
+            localStorage.setItem('gt_legends_form_data', JSON.stringify(toSave));
+        } catch (e) {
+            console.warn("Storage quota exceeded. Cannot save images as default.", e);
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
+  }, [formData]);
+
   const handleBuyAbility = (id: SpecialId, cost: number) => {
       if (coins >= cost && !unlockedAbilities.includes(id)) {
           setCoins(prev => prev - cost);
@@ -64,12 +109,16 @@ const App: React.FC = () => {
       return false;
   };
 
+  const handleUpdateForm = (updates: Partial<typeof INITIAL_FORM_DATA>) => {
+      setFormData(prev => ({ ...prev, ...updates }));
+  };
+
   const handleImagesReady = async (
     img1: string, 
     img2: string, 
     bulletImg: string | null, 
     p1Special: string, 
-    p2Special: string,
+    p2Special: string, 
     p1SpecialId: SpecialId,
     p2SpecialId: SpecialId,
     p1Name: string,
@@ -80,13 +129,9 @@ const App: React.FC = () => {
     velocity: number,
     diff: number
   ) => {
+    // Save state implicitly via handleUpdateForm called in UploadSection, but ensuring here
     setAppState(AppState.ANALYZING);
-    setLoadingText("Consulting the Gemini Oracle...");
-    setCustomBullet(bulletImg);
-    setAimMode(mode);
-    setAllowedPowerUps(powerUps);
-    setBulletVelocity(velocity);
-    setDifficulty(diff);
+    setLoadingText("Analyzing Bio-Data...");
     
     try {
       const stats = await analyzeFighters(img1, img2);
@@ -119,7 +164,7 @@ const App: React.FC = () => {
     } catch (e) {
       console.error(e);
       setAppState(AppState.UPLOAD);
-      alert("The ritual failed (API Error). Try again.");
+      alert("The ritual failed (Analysis Error). Try again.");
     }
   };
 
@@ -134,20 +179,19 @@ const App: React.FC = () => {
     // Award Coins
     let earned = 0;
     if (result.winner?.id === 'player1') {
-        earned = 100 * difficulty; // More coins for harder difficulties
+        earned = 100 * formData.difficulty; // More coins for harder difficulties
     } else {
         earned = 25; // Participation trophy
     }
     
-    // Animation/Sound for coins could go here
     setCoins(prev => prev + Math.floor(earned));
   };
 
   const handleReset = () => {
+    // Keep formData (images, settings) intact!
     setAppState(AppState.UPLOAD);
     setP1Data(null);
     setP2Data(null);
-    setCustomBullet(null);
     setGameResult(null);
     setGameId(0);
     setMpConfig(null);
@@ -209,13 +253,8 @@ const App: React.FC = () => {
       conn.on('open', () => {
           setPeerStatus(hosting ? 'Opponent Connected! Exchanging Data...' : 'Connected! Sending Fighter Data...');
           setMpConfig({ isMultiplayer: true, role: hosting ? 'HOST' : 'CLIENT', conn });
-
-          // Handshake
-          // 1. Client Sends Data to Host
-          // 2. Host Receives, creates Stats, Sends P1+P2 Data back to Client
           
           if (!hosting) {
-             // CLIENT: Send my P1 data (which will become P2 for the Host)
              conn.send({
                  type: 'HANDSHAKE_CLIENT_DATA',
                  payload: localP1DataForMp
@@ -225,26 +264,22 @@ const App: React.FC = () => {
 
       conn.on('data', async (data: any) => {
           if (data.type === 'HANDSHAKE_CLIENT_DATA' && hosting) {
-              // HOST: Received Client Data. Client's "P1" becomes our "P2".
-              // We need to generate stats for both now.
               const clientData = data.payload;
               const hostData = localP1DataForMp;
 
               setLoadingText("Syncing Dimensions...");
               setAppState(AppState.ANALYZING);
 
-              // Analyze
               try {
                   const stats = await analyzeFighters(hostData.imageSrc, clientData.imageSrc);
                   
-                  // Apply overrides
                   stats.player1.name = hostData.name || stats.player1.name;
                   stats.player1.specialMove = hostData.specialName || stats.player1.specialMove;
                   
                   stats.player2.name = clientData.name || stats.player2.name;
                   stats.player2.specialMove = clientData.specialName || stats.player2.specialMove;
                   
-                  stats.player1.hp = 200; // Fair default for MP
+                  stats.player1.hp = 200;
                   stats.player2.hp = 200;
 
                   const p1Obj: FighterData = { id: 'player1', imageSrc: hostData.imageSrc, stats: stats.player1, specialId: hostData.specialId };
@@ -252,27 +287,22 @@ const App: React.FC = () => {
 
                   setP1Data(p1Obj);
                   setP2Data(p2Obj);
-                  setCustomBullet(hostData.bulletImg);
-                  setBulletVelocity(hostData.bulletVelocity);
-                  setDifficulty(1);
+                  // Update form data to match session
+                  handleUpdateForm({ bulletImg: hostData.bulletImg, bulletVelocity: hostData.bulletVelocity, difficulty: 1 });
 
-                  // Send Ready to Client
                   conn.send({
                       type: 'HANDSHAKE_START_GAME',
                       payload: { p1: p1Obj, p2: p2Obj, bulletImg: hostData.bulletImg, bulletVelocity: hostData.bulletVelocity }
                   });
 
-                  setAppState(AppState.PLAYING); // Skip Versus for speed or show it briefly? Skip for sync simplicity
+                  setAppState(AppState.PLAYING);
               } catch(e) { console.error(e); }
 
           } else if (data.type === 'HANDSHAKE_START_GAME' && !hosting) {
-              // CLIENT: Received Game Data
               const { p1, p2, bulletImg, bulletVelocity } = data.payload;
               setP1Data(p1);
               setP2Data(p2);
-              setCustomBullet(bulletImg);
-              setBulletVelocity(bulletVelocity);
-              setDifficulty(1);
+              handleUpdateForm({ bulletImg, bulletVelocity, difficulty: 1 });
               setAppState(AppState.PLAYING);
           }
       });
@@ -301,6 +331,8 @@ const App: React.FC = () => {
         
         {appState === AppState.UPLOAD && (
           <UploadSection 
+            formData={formData}
+            setFormData={handleUpdateForm}
             onImagesReady={handleImagesReady} 
             onMultiplayerRequest={handleMultiplayerRequest} 
             coins={coins}
@@ -312,11 +344,9 @@ const App: React.FC = () => {
         {appState === AppState.LOBBY && (
             <div className="bg-slate-900 border border-slate-700 p-8 rounded-xl max-w-lg w-full text-center shadow-2xl animate-fade-in">
                 <h2 className="text-3xl font-cinzel text-blue-400 mb-6">MULTIPLAYER LOBBY</h2>
-                
                 <div className="mb-6 p-4 bg-black/40 rounded font-mono text-sm text-yellow-500 break-all border border-slate-800">
                     STATUS: {peerStatus}
                 </div>
-
                 {!isHost && !mpConfig && (
                     <div className="flex flex-col gap-4">
                         <Button onClick={hostGame} className="w-full">HOST GAME (Create Room)</Button>
@@ -332,7 +362,6 @@ const App: React.FC = () => {
                         </div>
                     </div>
                 )}
-                 
                  {isHost && !mpConfig && (
                      <div className="flex flex-col gap-4">
                          <div className="bg-slate-800 p-4 rounded border border-purple-500">
@@ -343,7 +372,6 @@ const App: React.FC = () => {
                          <Button onClick={() => { setIsHost(false); setPeerStatus("Ready"); }} variant="secondary">Cancel</Button>
                      </div>
                  )}
-
                  <Button onClick={handleReset} variant="danger" className="mt-8 text-sm py-2">Back to Menu</Button>
             </div>
         )}
@@ -364,12 +392,13 @@ const App: React.FC = () => {
             key={gameId} 
             p1={p1Data} 
             p2={p2Data} 
-            customBullet={customBullet}
+            customBullet={formData.bulletImg}
             onGameOver={handleGameOver} 
-            aimMode={aimMode}
-            allowedPowerUps={allowedPowerUps}
-            bulletVelocity={bulletVelocity}
-            difficulty={difficulty}
+            onExit={handleReset}
+            aimMode={formData.aimMode}
+            allowedPowerUps={Array.from(formData.selectedPowerUps)}
+            bulletVelocity={formData.bulletVelocity}
+            difficulty={formData.difficulty}
             multiplayer={mpConfig}
           />
         )}
@@ -379,34 +408,25 @@ const App: React.FC = () => {
             <h2 className="text-6xl font-black font-cinzel text-white mb-4 drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]">
               {gameResult.winner ? "VICTORY" : "DRAW"}
             </h2>
-            
             <p className="text-3xl font-bold text-red-500 font-cinzel mb-4 tracking-wider uppercase drop-shadow-md">
                 GT Ki Maa Kunal
             </p>
-
             <p className="text-xl text-purple-300 mb-6">{gameResult.message}</p>
-            
             <div className="mb-6 bg-yellow-500/10 border border-yellow-500/50 p-4 rounded-lg flex flex-col items-center gap-1 animate-bounce-slow">
                 <span className="text-yellow-400 font-bold uppercase text-xs tracking-widest">Rewards</span>
                 <span className="text-3xl font-mono font-bold text-white flex items-center gap-2">
-                    +{gameResult.winner?.id === 'player1' ? (100 * difficulty) : 25} 🪙
+                    +{gameResult.winner?.id === 'player1' ? (100 * formData.difficulty) : 25} 🪙
                 </span>
             </div>
-            
             {gameResult.winner && (
                <div className="mb-8 relative">
                   <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-indigo-500 blur-xl opacity-50 rounded-full"></div>
-                  <img 
-                    src={gameResult.winner.imageSrc} 
-                    alt="Winner" 
-                    className="w-40 h-40 object-cover rounded-full border-4 border-yellow-400 relative z-10 shadow-2xl" 
-                  />
+                  <img src={gameResult.winner.imageSrc} alt="Winner" className="w-40 h-40 object-cover rounded-full border-4 border-yellow-400 relative z-10 shadow-2xl" />
                   <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-yellow-500 text-black font-bold px-4 py-1 rounded-full text-xs uppercase z-20 whitespace-nowrap">
                     The Legend
                   </div>
                </div>
             )}
-
             <div className="flex gap-4">
                 <Button onClick={handleRematch} className="bg-gradient-to-r from-green-600 to-emerald-600 border-green-400/30 shadow-[0_0_20px_rgba(34,197,94,0.4)]">
                     Rematch
