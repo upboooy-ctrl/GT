@@ -16,27 +16,32 @@ interface UploadSectionProps {
     aimMode: 'MANUAL' | 'AUTO',
     initialHp: number,
     allowedPowerUps: PowerUpType[],
-    bulletVelocity: number
+    bulletVelocity: number,
+    difficulty: number
   ) => void;
+  onMultiplayerRequest: (p1Data: any) => void; // New callback for multiplayer setup
 }
 
-const DEFAULT_AVATAR_P1 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIiBmaWxsPSJub25lIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ3JhZDEiIHgxPSIwIiB5MT0iMCIgeDI9IjIwMCIgeTI9IjIwMCI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiM2MzY2ZjEiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2E4NTVmNyIgLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSJ1cmwoI2dyYWQxKSIgcng9IjIwIiAvPgogIDxjaXJjbGUgY3g9IjEwMCIgY3k9IjgwIiByPSI1MCIgZmlsbD0iIzFmMjkzNyIgLz4KICA8cGF0aCBkPSJNMTAwIDE0MCBDNjAgMTQwIDMwIDIwMCAzMCAyMDAgTDE3MCAyMDAgQzE3MCAyMDAgMTQwIDE0MCAxMDAgMTQwIFoiIGZpbGw9IiMxZjI5MzciIC8+CiAgPGNpcmNsZSBjeT0iODAiIGN5PSI3MCIgcj0iNSIgZmlsbD0iIzYwYWFmNiIgLz4KICA8cGF0aCBkPSJNNzAgOTAgUTEwMCAxMTAgMTMwIDkwIiBzdHJva2U9IiM2MGFhZjYiIHN0cm9rZS13aWR0aD0iMyIgZmlsbD0ibm9uZSIgLz4KPC9zdmc+";
+// Updated SVG for Kunal (Pink Shirt, Glasses, Happy)
+const DEFAULT_AVATAR_P1 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIj4KICA8cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2ZiY2ZlOCIvPgogIDxjaXJjbGUgY3g9IjEwMCIgY3k9IjkwIiByPSI1MCIgZmlsbD0iI2Y4ZDdkYSIvPgogIDxwYXRoIGQ9Ik01MCAyMDAgUTEwMCAyMDAgMTUwIDIwMCBMMTUwIDE2MCBRMTAwIDE4MCA1MCAxNjAgWiIgZmlsbD0iI2Y0NzJiNiIvPgogIDxyZWN0IHg9IjcwIiB5PSI4MCIgd2lkdGg9IjI1IiBoZWlnaHQ9IjE1IiByeD0iNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgPHJlY3QgeD0iMTA1IiB5PSI4MCIgd2lkdGg9IjI1IiBoZWlnaHQ9IjE1IiByeD0iNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgPGxpbmUgeDE9Ijk1IiB5MT0iODciIHgyPSIxMDUiIHkyPSI4NyIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTg1IDExMCBRMTAwIDEzMCAxMTUgMTEwIiBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjMiLz4KPC9zdmc+";
 
-const DEFAULT_AVATAR_P2 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIiBmaWxsPSJub25lIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ3JhZDIiIHgxPSIwIiB5MT0iMCIgeDI9IjIwMCIgeTI9IjIwMCI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmNDNmNWUiIC8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2Y1OWUwYiIgLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSJ1cmwoI2dyYWQyKSIgcng9IjIwIiAvPgogIDxjaXJjbGUgY3g9IjEwMCIgY3k9IjgwIiByPSI1MCIgZmlsbD0iIzFmMjkzNyIgLz4KICA8cGF0aCBkPSJNMTAwIDE0MCBDNjAgMTQwIDMwIDIwMCAzMCAyMDAgTDE3MCAyMDAgQzE3MCAyMDAgMTQwIDE0MCAxMDAgMTQwIFoiIGZpbGw9IiMxZjI5MzciIC8+CiAgPGNpcmNsZSBjeT0iODAiIGN5PSI3MCIgcj0iNSIgZmlsbD0iI2ZjYTVhNSIgLz4KICA8Y2lyY2xlIGN4PSIxMjAiIGN5PSI3MCIgcj0iNSIgZmlsbD0iI2ZjYTVhNSIgLz4KICA8cGF0aCBkPSJNNzAgMTAwIFExMDAgODAgMTMwIDEwMCIgc3Ryb2tlPSIjZmNhNWE1IiBzdHJva2Utd2lkdGg9IjMiIGZpbGw9Im5vbmUiIC8+Cjwvc3ZnPg==";
+// Updated SVG for GT (Dark Green/Black Shirt, Glasses, Serious)
+const DEFAULT_AVATAR_P2 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIj4KICA8cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzAyMmMyMiIvPgogIDxjaXJjbGUgY3g9IjEwMCIgY3k9IjkwIiByPSI1MCIgZmlsbD0iI2UyYzRiMCIvPgogIDxwYXRoIGQ9Ik00MCAyMDAgTDE2MCAyMDAgTDE2MCAxNjAgUTEwMCAxNDAgNDAgMTYwIFoiIGZpbGw9IiMwZjE3MmEiLz4KICA8Y2lyY2xlIGN4PSI4MCIgY3k9Ijg1IiByPSIxMiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNGI1NTYzIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8Y2lyY2xlIGN4PSIxMjAiIGN5PSI4NSIgcj0iMTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzRiNTU2MyIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPGxpbmUgeDE9IjkyIiB5MT0iODUiIHgyPSIxMDgiIHkyPSI4NSIgc3Ryb2tlPSIjNGI1NTYzIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8bGluZSB4MT0iOTAiIHkxPSIxMjAiIHgyPSIxMTAiIHkyPSIxMjAiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIvPgo8L3N2Zz4=";
 
 const POWER_OPTIONS: {id: SpecialId, label: string, desc: string}[] = [
     { id: 'GMASTI', label: 'Gmasti (Fireball)', desc: 'Shoots a massive fireball. Simple, high damage.' },
     { id: '6FTBADDIE', label: '6Ft Baddie (Ice)', desc: 'Fires an Ice Bolt. Freezes and slows the opponent.' },
     { id: 'ROHANMOB', label: 'Rohan Mob (Shield)', desc: 'White Shield: Grants Total Invulnerability for 5s.' },
-    { id: 'LAMBARDAAR', label: 'Lambardaar (Giant)', desc: 'Become HUGE. Deal 1.5x Dmg. Harder to miss.' },
-    { id: 'SINGH', label: 'Singh (Tuff)', desc: 'Iron Will: Take 80% Less Dmg + Deal 2x Dmg.' },
-    { id: 'SONI', label: 'Soni (God Mode)', desc: 'BROKEN: Invincible + 2x Speed + 3x Power (5s).' },
+    { id: 'LAMBARDAAR', label: 'Lambardaar (Giant)', desc: 'HEALS 50 HP + Giant Size + 1.25x Damage.' },
+    { id: 'SINGH', label: 'Singh (Tuff)', desc: 'Immortal Will: 90% Dmg Reduc + 2x Dmg + Regen.' },
+    { id: 'SONI', label: 'Soni (God Mode)', desc: 'BROKEN: Touch=1/2 HP + Void Beam + God Mode.' },
     { id: 'PAL', label: 'Pal (Lovely)', desc: 'Peace Mode. No damage dealt. Both players Heal.' },
     { id: 'MANAN', label: 'Manan (Curse)', desc: 'Beam Attack. Curses Enemy (-10HP/s). You Shrink.' },
-    { id: 'GT_MODE', label: 'GT Mode (Ultimate)', desc: 'Sacrifice 50% HP to gain Random Specials + Rapid Fire.' },
+    { id: 'ABHAY', label: 'Abhay (Magnet)', desc: 'Gravity Well: Pulls opponent in & deals contact dmg.' },
+    { id: 'GT_MODE', label: 'GT Mode (Ultimate)', desc: 'NO COST! 3-Way Spread Shot + God Speed + Random Buffs.' },
 ];
 
-export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) => {
+export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onMultiplayerRequest }) => {
   const [img1, setImg1] = useState<string | null>(null);
   const [img2, setImg2] = useState<string | null>(null);
   const [bulletImg, setBulletImg] = useState<string | null>(null);
@@ -51,6 +56,7 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) =
 
   const [aimMode, setAimMode] = useState<'MANUAL' | 'AUTO'>('MANUAL');
   const [initialHp, setInitialHp] = useState(150);
+  const [difficulty, setDifficulty] = useState(1);
   const [bulletVelocity, setBulletVelocity] = useState(12); // Default 12
   const [selectedPowerUps, setSelectedPowerUps] = useState<Set<PowerUpType>>(new Set(['HEAL', 'SPEED', 'POWER', 'BLACK_HOLE']));
   
@@ -69,6 +75,8 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) =
         setError(null);
       };
       reader.readAsDataURL(file);
+      // Reset input value to allow re-selection of same file
+      e.target.value = '';
     }
   };
 
@@ -99,25 +107,34 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) =
   };
 
   const handleStart = () => {
-    if (img1 && img2) {
-      onImagesReady(
-          img1, 
-          img2, 
-          bulletImg, 
-          p1SpecialName || "GMASTI", 
-          p2SpecialName || "6FTBADDIE",
-          p1SpecialId,
-          p2SpecialId,
-          p1Name,
-          p2Name,
-          aimMode,
-          initialHp,
-          Array.from(selectedPowerUps),
+    // This function is effectively replaced by the button clicks calling onImagesReady directly or via wrapper
+  };
+
+  const handleStartWithDifficulty = () => {
+      if (img1 && img2) {
+          // @ts-ignore
+          onImagesReady(img1, img2, bulletImg, p1SpecialName, p2SpecialName, p1SpecialId, p2SpecialId, p1Name, p2Name, aimMode, initialHp, Array.from(selectedPowerUps), bulletVelocity, difficulty);
+      } else {
+          setError("Please choose fighters for both slots.");
+      }
+  }
+
+  const handlePlayOnline = () => {
+      if (!img1) {
+          setError("Please upload YOUR fighter (Player 1) to play online.");
+          return;
+      }
+      
+      const p1Data = {
+          imageSrc: img1,
+          name: p1Name,
+          specialName: p1SpecialName,
+          specialId: p1SpecialId,
+          bulletImg,
           bulletVelocity
-      );
-    } else {
-      setError("Please choose fighters for both slots.");
-    }
+      };
+      
+      onMultiplayerRequest(p1Data);
   };
 
   return (
@@ -151,7 +168,6 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) =
                     accept="image/*" 
                     className="hidden" 
                     onChange={(e) => handleFileChange(e, setImg1)}
-                    onClick={(e) => (e.target as HTMLInputElement).value = ''} 
                 />
                 <div className="w-16 h-16 mb-2 rounded-full bg-slate-800 flex items-center justify-center group-hover:scale-110 transition-transform">
                     <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -229,7 +245,6 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) =
                         accept="image/*" 
                         className="hidden" 
                         onChange={(e) => handleFileChange(e, setBulletImg)}
-                        onClick={(e) => (e.target as HTMLInputElement).value = ''}
                     />
                     <div className="w-8 h-8 mb-2 rounded-full bg-slate-800 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <svg className="w-4 h-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
@@ -258,6 +273,21 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) =
                      <span>Fast</span>
                      <span>Hyper</span>
                  </div>
+            </div>
+
+            {/* Difficulty */}
+            <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-700 flex flex-col gap-2">
+                 <label className="text-[10px] font-bold text-slate-400 uppercase text-center">Difficulty</label>
+                 <select 
+                    value={difficulty} 
+                    onChange={(e) => setDifficulty(parseFloat(e.target.value))}
+                    className="bg-slate-800 border border-slate-600 rounded p-1 text-white text-[10px] focus:outline-none"
+                 >
+                     <option value={0.5}>EASY (50% Boss Dmg)</option>
+                     <option value={1.0}>NORMAL</option>
+                     <option value={1.5}>HARD (1.5x Boss Dmg)</option>
+                     <option value={2.0}>GOD (2x Boss Dmg)</option>
+                 </select>
             </div>
 
             {/* HP Selection */}
@@ -343,7 +373,6 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) =
                     accept="image/*" 
                     className="hidden" 
                     onChange={(e) => handleFileChange(e, setImg2)}
-                    onClick={(e) => (e.target as HTMLInputElement).value = ''}
                 />
                 <div className="w-16 h-16 mb-2 rounded-full bg-slate-800 flex items-center justify-center group-hover:scale-110 transition-transform">
                     <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -406,9 +435,14 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady }) =
         </div>
       )}
 
-      <Button onClick={handleStart} disabled={!img1 || !img2} className="w-full md:w-auto text-xl py-4">
-        Awaken The Power
-      </Button>
+      <div className="flex gap-4">
+        <Button onClick={handleStartWithDifficulty} disabled={!img1 || !img2} className="w-full md:w-auto text-xl py-4 flex-1">
+            Play Local 1v1
+        </Button>
+        <Button onClick={handlePlayOnline} disabled={!img1} variant="secondary" className="w-full md:w-auto text-xl py-4 flex-1 border-blue-500 text-blue-300">
+            Play Online (Multiplayer)
+        </Button>
+      </div>
     </div>
   );
 };

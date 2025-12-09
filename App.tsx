@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UploadSection } from './components/UploadSection';
 import { VersusScreen } from './components/VersusScreen';
 import { GameCanvas } from './components/GameCanvas';
 import { analyzeFighters } from './services/geminiService';
-import { AppState, FighterData, GameResult, PowerUpType, SpecialId } from './types';
+import { AppState, FighterData, GameResult, PowerUpType, SpecialId, MultiplayerConfig } from './types';
 import { Button } from './components/Button';
 
 const App: React.FC = () => {
@@ -17,6 +17,23 @@ const App: React.FC = () => {
   const [aimMode, setAimMode] = useState<'MANUAL' | 'AUTO'>('MANUAL');
   const [allowedPowerUps, setAllowedPowerUps] = useState<PowerUpType[]>([]);
   const [bulletVelocity, setBulletVelocity] = useState(12);
+  const [difficulty, setDifficulty] = useState(1);
+
+  // Multiplayer State
+  const [mpConfig, setMpConfig] = useState<MultiplayerConfig | null>(null);
+  const [myPeerId, setMyPeerId] = useState<string>('');
+  const [remotePeerId, setRemotePeerId] = useState<string>('');
+  const [peerStatus, setPeerStatus] = useState<string>('');
+  const peerRef = useRef<any>(null);
+  const [isHost, setIsHost] = useState(false);
+  const [localP1DataForMp, setLocalP1DataForMp] = useState<any>(null);
+
+  // Initial Cleanup
+  useEffect(() => {
+    return () => {
+        if (peerRef.current) peerRef.current.destroy();
+    };
+  }, []);
 
   const handleImagesReady = async (
     img1: string, 
@@ -31,7 +48,8 @@ const App: React.FC = () => {
     mode: 'MANUAL' | 'AUTO',
     initialHp: number,
     powerUps: PowerUpType[],
-    velocity: number
+    velocity: number,
+    diff: number
   ) => {
     setAppState(AppState.ANALYZING);
     setLoadingText("Consulting the Gemini Oracle...");
@@ -39,6 +57,7 @@ const App: React.FC = () => {
     setAimMode(mode);
     setAllowedPowerUps(powerUps);
     setBulletVelocity(velocity);
+    setDifficulty(diff);
     
     try {
       const stats = await analyzeFighters(img1, img2);
@@ -91,12 +110,137 @@ const App: React.FC = () => {
     setCustomBullet(null);
     setGameResult(null);
     setGameId(0);
+    setMpConfig(null);
+    if(peerRef.current) {
+        peerRef.current.destroy();
+        peerRef.current = null;
+    }
   };
 
   const handleRematch = () => {
     setGameId(prev => prev + 1); 
     setGameResult(null);
     setAppState(AppState.PLAYING);
+  };
+
+  // --- Multiplayer Logic ---
+
+  const initPeer = () => {
+      if (peerRef.current) return;
+      const Peer = (window as any).Peer;
+      if(!Peer) { alert("PeerJS not loaded"); return; }
+      
+      const peer = new Peer(null, { debug: 2 });
+      peerRef.current = peer;
+
+      peer.on('open', (id: string) => {
+          setMyPeerId(id);
+          setPeerStatus('Connected to Server. Ready to Host or Join.');
+      });
+
+      peer.on('connection', (conn: any) => {
+          handleConnection(conn, true);
+      });
+
+      peer.on('error', (err: any) => {
+          setPeerStatus('Error: ' + err.type);
+      });
+  };
+
+  const handleMultiplayerRequest = (p1Data: any) => {
+      setLocalP1DataForMp(p1Data);
+      setAppState(AppState.LOBBY);
+      initPeer();
+  };
+
+  const hostGame = () => {
+      setIsHost(true);
+      setPeerStatus('Waiting for opponent... Share your ID: ' + myPeerId);
+  };
+
+  const joinGame = () => {
+      if (!remotePeerId) return;
+      setPeerStatus('Connecting to ' + remotePeerId + '...');
+      const conn = peerRef.current.connect(remotePeerId);
+      handleConnection(conn, false);
+  };
+
+  const handleConnection = (conn: any, hosting: boolean) => {
+      conn.on('open', () => {
+          setPeerStatus(hosting ? 'Opponent Connected! Exchanging Data...' : 'Connected! Sending Fighter Data...');
+          setMpConfig({ isMultiplayer: true, role: hosting ? 'HOST' : 'CLIENT', conn });
+
+          // Handshake
+          // 1. Client Sends Data to Host
+          // 2. Host Receives, creates Stats, Sends P1+P2 Data back to Client
+          
+          if (!hosting) {
+             // CLIENT: Send my P1 data (which will become P2 for the Host)
+             conn.send({
+                 type: 'HANDSHAKE_CLIENT_DATA',
+                 payload: localP1DataForMp
+             });
+          }
+      });
+
+      conn.on('data', async (data: any) => {
+          if (data.type === 'HANDSHAKE_CLIENT_DATA' && hosting) {
+              // HOST: Received Client Data. Client's "P1" becomes our "P2".
+              // We need to generate stats for both now.
+              const clientData = data.payload;
+              const hostData = localP1DataForMp;
+
+              setLoadingText("Syncing Dimensions...");
+              setAppState(AppState.ANALYZING);
+
+              // Analyze
+              try {
+                  const stats = await analyzeFighters(hostData.imageSrc, clientData.imageSrc);
+                  
+                  // Apply overrides
+                  stats.player1.name = hostData.name || stats.player1.name;
+                  stats.player1.specialMove = hostData.specialName || stats.player1.specialMove;
+                  
+                  stats.player2.name = clientData.name || stats.player2.name;
+                  stats.player2.specialMove = clientData.specialName || stats.player2.specialMove;
+                  
+                  stats.player1.hp = 200; // Fair default for MP
+                  stats.player2.hp = 200;
+
+                  const p1Obj: FighterData = { id: 'player1', imageSrc: hostData.imageSrc, stats: stats.player1, specialId: hostData.specialId };
+                  const p2Obj: FighterData = { id: 'player2', imageSrc: clientData.imageSrc, stats: stats.player2, specialId: clientData.specialId };
+
+                  setP1Data(p1Obj);
+                  setP2Data(p2Obj);
+                  setCustomBullet(hostData.bulletImg);
+                  setBulletVelocity(hostData.bulletVelocity);
+                  setDifficulty(1);
+
+                  // Send Ready to Client
+                  conn.send({
+                      type: 'HANDSHAKE_START_GAME',
+                      payload: { p1: p1Obj, p2: p2Obj, bulletImg: hostData.bulletImg, bulletVelocity: hostData.bulletVelocity }
+                  });
+
+                  setAppState(AppState.PLAYING); // Skip Versus for speed or show it briefly? Skip for sync simplicity
+              } catch(e) { console.error(e); }
+
+          } else if (data.type === 'HANDSHAKE_START_GAME' && !hosting) {
+              // CLIENT: Received Game Data
+              const { p1, p2, bulletImg, bulletVelocity } = data.payload;
+              setP1Data(p1);
+              setP2Data(p2);
+              setCustomBullet(bulletImg);
+              setBulletVelocity(bulletVelocity);
+              setDifficulty(1);
+              setAppState(AppState.PLAYING);
+          }
+      });
+      
+      conn.on('close', () => {
+          alert("Connection Lost");
+          handleReset();
+      });
   };
 
   return (
@@ -112,7 +256,46 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col items-center justify-center min-h-screen">
         
         {appState === AppState.UPLOAD && (
-          <UploadSection onImagesReady={handleImagesReady} />
+          <UploadSection onImagesReady={handleImagesReady} onMultiplayerRequest={handleMultiplayerRequest} />
+        )}
+
+        {appState === AppState.LOBBY && (
+            <div className="bg-slate-900 border border-slate-700 p-8 rounded-xl max-w-lg w-full text-center shadow-2xl animate-fade-in">
+                <h2 className="text-3xl font-cinzel text-blue-400 mb-6">MULTIPLAYER LOBBY</h2>
+                
+                <div className="mb-6 p-4 bg-black/40 rounded font-mono text-sm text-yellow-500 break-all border border-slate-800">
+                    STATUS: {peerStatus}
+                </div>
+
+                {!isHost && !mpConfig && (
+                    <div className="flex flex-col gap-4">
+                        <Button onClick={hostGame} className="w-full">HOST GAME (Create Room)</Button>
+                        <div className="flex gap-2">
+                            <input 
+                                type="text" 
+                                placeholder="Enter Host ID" 
+                                value={remotePeerId}
+                                onChange={e => setRemotePeerId(e.target.value)}
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded p-2 text-white"
+                            />
+                            <Button onClick={joinGame} variant="secondary">JOIN</Button>
+                        </div>
+                    </div>
+                )}
+                 
+                 {isHost && !mpConfig && (
+                     <div className="flex flex-col gap-4">
+                         <div className="bg-slate-800 p-4 rounded border border-purple-500">
+                             <p className="text-xs text-slate-400 mb-2">YOUR ROOM ID</p>
+                             <p className="text-2xl font-bold text-white tracking-widest select-all cursor-pointer" onClick={() => navigator.clipboard.writeText(myPeerId)}>{myPeerId}</p>
+                         </div>
+                         <p className="text-slate-500 text-sm animate-pulse">Waiting for challenger to join...</p>
+                         <Button onClick={() => { setIsHost(false); setPeerStatus("Ready"); }} variant="secondary">Cancel</Button>
+                     </div>
+                 )}
+
+                 <Button onClick={handleReset} variant="danger" className="mt-8 text-sm py-2">Back to Menu</Button>
+            </div>
         )}
 
         {appState === AppState.ANALYZING && (
@@ -136,6 +319,8 @@ const App: React.FC = () => {
             aimMode={aimMode}
             allowedPowerUps={allowedPowerUps}
             bulletVelocity={bulletVelocity}
+            difficulty={difficulty}
+            multiplayer={mpConfig}
           />
         )}
 

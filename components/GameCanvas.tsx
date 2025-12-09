@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FighterData, GameResult, PowerUpType, SpecialId, ActiveEffect } from '../types';
+import { FighterData, GameResult, PowerUpType, SpecialId, ActiveEffect, MultiplayerConfig, RemoteInput } from '../types';
 
 interface GameCanvasProps {
   p1: FighterData;
@@ -9,6 +9,8 @@ interface GameCanvasProps {
   aimMode: 'MANUAL' | 'AUTO';
   allowedPowerUps: PowerUpType[];
   bulletVelocity: number;
+  difficulty?: number;
+  multiplayer?: MultiplayerConfig | null;
 }
 
 interface PowerUp {
@@ -47,7 +49,7 @@ interface Bullet {
     size: number;
     color: string;
     isSpecial?: boolean;
-    logicType?: 'FIRE' | 'ICE' | 'MANAN'; 
+    logicType?: 'FIRE' | 'ICE' | 'MANAN' | 'VOID'; 
     img?: HTMLImageElement;
 }
 
@@ -62,7 +64,7 @@ interface Particle {
     isHeart?: boolean;
 }
 
-export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, onGameOver, aimMode, allowedPowerUps, bulletVelocity }) => {
+export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, onGameOver, aimMode, allowedPowerUps, bulletVelocity, difficulty = 1, multiplayer }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -74,6 +76,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
   
+  // Mobile Controls State
+  const joystickRef = useRef({ active: false, startX: 0, startY: 0, dx: 0, dy: 0 });
+
   // Game State Refs
   const gameState = useRef({
     p1: { 
@@ -87,7 +92,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         baseSpeed: 3 + ((p1.stats.speed || 5) * 0.3), speed: 3 + ((p1.stats.speed || 5) * 0.3), 
         effects: [] as ActiveEffect[],
         hitFlash: 0,
-        specialCharge: 0
+        specialCharge: 0,
+        contactCooldown: 0
     },
     p2: { 
         x: 700, y: 300, 
@@ -101,7 +107,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         phase: 0, 
         effects: [] as ActiveEffect[],
         hitFlash: 0,
-        specialCharge: 0
+        specialCharge: 0,
+        contactCooldown: 0
     },
     bullets: [] as Bullet[],
     particles: [] as Particle[],
@@ -109,6 +116,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     blackHoles: [] as BlackHole[],
     texts: [] as FloatingText[],
     keys: { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, KeyW: false, KeyS: false, KeyA: false, KeyD: false, Space: false, KeyE: false },
+    remoteKeys: { keys: {}, mouse: {x:0, y:0}, joystick: {dx:0, dy:0, active: false} } as RemoteInput,
     mouse: { x: 400, y: 300 }, // Default center to avoid NaN on initial frame
     time: 0,
     deathTimer: 0,
@@ -231,6 +239,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
 
   const togglePause = () => {
       if (gameState.current.gameEnded) return;
+      // In multiplayer, pausing might desync, so we disable pause for client, or implement robust pause.
+      // For simplicity, allowed for host, ignored for client or sends pause command.
+      if (multiplayer && multiplayer.role === 'CLIENT') return; 
+
       const newState = !isPausedRef.current;
       isPausedRef.current = newState;
       setIsPaused(newState);
@@ -251,6 +263,54 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         const img = new Image();
         img.src = customBullet;
         gameState.current.bulletImg = img;
+    }
+
+    // Network Listeners
+    if (multiplayer) {
+        multiplayer.conn.on('data', (packet: any) => {
+            if (packet.type === 'INPUT' && multiplayer.role === 'HOST') {
+                gameState.current.remoteKeys = packet.payload;
+            } else if (packet.type === 'GAME_STATE' && multiplayer.role === 'CLIENT') {
+                // Apply State Snapshot
+                const pl = packet.payload;
+                gameState.current.p1.x = pl.p1.x;
+                gameState.current.p1.y = pl.p1.y;
+                gameState.current.p1.hp = pl.p1.hp;
+                gameState.current.p1.effects = pl.p1.effects;
+                gameState.current.p1.specialCharge = pl.p1.sc;
+                gameState.current.p1.hitFlash = pl.p1.hf;
+
+                gameState.current.p2.x = pl.p2.x;
+                gameState.current.p2.y = pl.p2.y;
+                gameState.current.p2.hp = pl.p2.hp;
+                gameState.current.p2.effects = pl.p2.effects;
+                gameState.current.p2.specialCharge = pl.p2.sc;
+                gameState.current.p2.hitFlash = pl.p2.hf;
+
+                gameState.current.bullets = pl.bullets;
+                gameState.current.blackHoles = pl.bhs;
+                gameState.current.time = pl.time;
+                gameState.current.screenShake = pl.shake;
+
+                // Sync UI State
+                setP1Health(pl.p1.hp);
+                setP2Health(pl.p2.hp);
+                setP1Special(pl.p1.sc);
+                setP2Special(pl.p2.sc);
+                
+                // Triggers
+                if (pl.events) {
+                    pl.events.forEach((evt: any) => {
+                        if (evt.type === 'sound') playSound(evt.val);
+                        if (evt.type === 'text') addFloatingText(evt.x, evt.y, evt.text, evt.color, evt.size);
+                        if (evt.type === 'particle') createParticles(evt.x, evt.y, evt.color, evt.count, evt.size);
+                    });
+                }
+            } else if (packet.type === 'GAME_OVER') {
+                gameState.current.gameEnded = true;
+                onGameOver(packet.payload);
+            }
+        });
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -351,17 +411,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
      const specialId: SpecialId = isP1 ? (p1.specialId || 'GMASTI') : (p2.specialId || '6FTBADDIE');
      const displayName = isP1 ? p1.stats.specialMove : p2.stats.specialMove;
 
-     // GT MODE CHECK FIRST (Cost Logic)
+     // GT MODE CHECK FIRST
      if (specialId === 'GT_MODE') {
-         if (char.hp < 10) return; // Cannot sacrifice last bit of life
-         
-         // Pay the price
-         const sacrifice = Math.floor(char.hp / 2);
-         char.hp -= sacrifice;
-         if (isP1) setP1Health(char.hp); else setP2Health(char.hp);
-         
-         // Visuals
-         addFloatingText(char.x, char.y - 90, `SACRIFICE -${sacrifice} HP`, '#ef4444', 'large');
+         // REMOVED LIMITATIONS: No HP Cost, No Min HP check
          addFloatingText(char.x, char.y - 60, "GT OVERDRIVE!", '#a855f7', 'large');
          playSound('void');
          
@@ -389,20 +441,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
          
          case 'LAMBARDAAR': // Giant
              char.effects.push({ type: 'GIANT', duration: 600 }); // 10s
+             // Heal on activation
+             char.hp = Math.min(char.maxHp, char.hp + 50);
+             if (isP1) setP1Health(char.hp); else setP2Health(char.hp);
+             
              playSound('powerup');
-             addFloatingText(char.x, char.y - 90, "GIANT MODE", '#fcd34d', 'large');
+             addFloatingText(char.x, char.y - 90, "GIANT + HEAL", '#fcd34d', 'large');
              break;
              
          case 'SINGH': // Tuff + Power
              char.effects.push({ type: 'TOUGH', duration: 600 }); // 10s
              playSound('shield');
-             addFloatingText(char.x, char.y - 90, "IRON WILL", '#94a3b8', 'large');
-             break;
-             
-         case 'SONI': // Gold Mode (BROKEN: Shield + Speed + Power)
-             char.effects.push({ type: 'GOLD_MODE', duration: 300 }); // 5s (Short but OP)
-             playSound('powerup');
-             addFloatingText(char.x, char.y - 90, "GOD MODE", '#facc15', 'large');
+             addFloatingText(char.x, char.y - 90, "IMMORTAL WILL", '#94a3b8', 'large');
              break;
              
          case 'PAL': // Lovely
@@ -412,11 +462,26 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             addFloatingText(canvasRef.current!.width/2, canvasRef.current!.height/2, "PEACE & LOVE", '#f472b6', 'large');
             break;
         
+        case 'ABHAY': // Gravity
+             char.effects.push({ type: 'GRAVITY_WELL', duration: 400 }); 
+             playSound('void');
+             addFloatingText(char.x, char.y - 90, "GRAVITY WELL", '#c026d3', 'large');
+             break;
+
         case 'MANAN': // Curse + Shrink
              char.effects.push({ type: 'SHRINK', duration: 300 }); // 5s self shrink
              addFloatingText(char.x, char.y - 90, "SHRINK!", '#3b82f6', 'small');
              // Fallthrough to fire projectile logic...
-        
+
+        case 'SONI': // God Mode (BROKEN: Shield + Speed + Power + Touch Death + Void Beam)
+             if (specialId === 'SONI') {
+                char.effects.push({ type: 'GOLD_MODE', duration: 300 }); // 5s
+                playSound('powerup');
+                addFloatingText(char.x, char.y - 90, "GOD MODE + VOID BEAM", '#facc15', 'large');
+             }
+             // Also fires the VOID BEAM (Fallthrough to projectile logic, but we override props)
+             // Fallthrough
+
          // Projectile Based
          case 'GMASTI':
          case '6FTBADDIE':
@@ -424,7 +489,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             playSound('special');
              // Aiming Logic
              let angle = 0;
-             if (isP1) {
+             if (multiplayer && multiplayer.role === 'HOST' && !isP1) {
+                 // P2 aiming logic when Remote
+                 const remote = gameState.current.remoteKeys;
+                 if (remote.joystick.active) {
+                    angle = Math.atan2(remote.joystick.dy, remote.joystick.dx);
+                 } else {
+                     // Mouse fallback
+                     angle = Math.atan2(remote.mouse.y - char.y, remote.mouse.x - char.x);
+                 }
+             } else if (isP1) {
                  if (aimMode === 'MANUAL') {
                      // Safety check for aiming coordinates
                      const dx = gameState.current.mouse.x - char.x;
@@ -435,6 +509,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                      angle = Math.atan2(target.y - char.y, target.x - char.x);
                  }
              } else {
+                 // AI Aim
                 const target = gameState.current.p1;
                 angle = Math.atan2(target.y - char.y, target.x - char.x);
              }
@@ -442,10 +517,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
              if (isNaN(angle)) angle = 0;
              
              let bulletColor = '#ef4444';
-             let logicType: 'FIRE' | 'ICE' | 'MANAN' = 'FIRE';
+             let logicType: 'FIRE' | 'ICE' | 'MANAN' | 'VOID' = 'FIRE';
+             let bSize = isP1 ? 40 : 30;
              
              if (specialId === '6FTBADDIE') { bulletColor = '#06b6d4'; logicType = 'ICE'; }
              else if (specialId === 'MANAN') { bulletColor = '#3b82f6'; logicType = 'MANAN'; }
+             else if (specialId === 'SONI') { bulletColor = '#000000'; logicType = 'VOID'; bSize = 60; }
 
              gameState.current.bullets.push({
                  x: char.x + Math.cos(angle) * 40,
@@ -454,7 +531,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                  vy: Math.sin(angle) * (isP1 ? 16 : 12),
                  owner: owner,
                  dmg: (isP1 ? 80 : 50) * dmgMult, 
-                 size: isP1 ? 40 : 30,
+                 size: bSize,
                  color: bulletColor,
                  isSpecial: true,
                  logicType: logicType
@@ -483,7 +560,40 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         } else if (isPausedRef.current) {
             // Paused state, no update
         } else {
-             updateGameLogic(canvas, state);
+             // If Multiplayer Client, DO NOT run logic, just render state
+             if (!multiplayer || multiplayer.role === 'HOST') {
+                 updateGameLogic(canvas, state);
+             }
+             
+             // Network Sync
+             if (multiplayer) {
+                 if (multiplayer.role === 'HOST') {
+                     // Host sends snapshot
+                     multiplayer.conn.send({
+                         type: 'GAME_STATE',
+                         payload: {
+                             p1: { x: state.p1.x, y: state.p1.y, hp: state.p1.hp, effects: state.p1.effects, sc: state.p1.specialCharge, hf: state.p1.hitFlash },
+                             p2: { x: state.p2.x, y: state.p2.y, hp: state.p2.hp, effects: state.p2.effects, sc: state.p2.specialCharge, hf: state.p2.hitFlash },
+                             bullets: state.bullets.map(b => ({ ...b, img: undefined })), // Dont send Image object
+                             bhs: state.blackHoles,
+                             time: state.time,
+                             shake: state.screenShake,
+                             // Events handled in updateGameLogic via trigger list?
+                             // For simplicity, we just sync state. Events are tricky without queue.
+                         }
+                     });
+                 } else {
+                     // Client sends inputs
+                     multiplayer.conn.send({
+                         type: 'INPUT',
+                         payload: {
+                             keys: state.keys,
+                             mouse: state.mouse,
+                             joystick: joystickRef.current
+                         }
+                     });
+                 }
+             }
         }
     } catch (error) {
         console.error("Game Update Error:", error);
@@ -531,10 +641,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             if (state.deathTimer > 90) {
                 state.gameEnded = true;
                 const winner = state.p1.hp > 0 ? p1 : (state.p2.hp > 0 ? p2 : null);
-                onGameOver({
+                const result = {
                     winner,
                     message: winner ? (winner.id === 'player1' ? "You have proved your strength!" : "The Legend remains supreme.") : "Double KO!",
-                });
+                };
+                onGameOver(result);
+                
+                // Host sends Game Over
+                if(multiplayer && multiplayer.role === 'HOST') {
+                    multiplayer.conn.send({ type: 'GAME_OVER', payload: result });
+                }
             }
             return;
         }
@@ -600,8 +716,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             let isLovely = false;
             let isGold = false;
             let isGtMode = false;
+            let isVoidTrapped = false;
             
             if (char.hitFlash > 0) char.hitFlash--;
+            if (char.contactCooldown > 0) char.contactCooldown--;
 
             for (let i = char.effects.length - 1; i >= 0; i--) {
                 const effect = char.effects[i];
@@ -615,18 +733,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                 if (effect.type === 'FREEZE') isFrozen = true;
                 if (effect.type === 'SHIELD') isShielded = true;
                 if (effect.type === 'TOUGH') {
-                    damageTakenMult *= 0.2; // 80% Reduction
-                    damageMult *= 2; // Added Power boost for SINGH
+                    damageTakenMult *= 0.1; // 90% Reduction (SINGH Buff)
+                    damageMult *= 2; 
+                    if (state.time % 30 === 0) char.hp = Math.min(char.maxHp, char.hp + 2); // Regen
+                    if (isPlayer) setP1Health(char.hp); else setP2Health(char.hp);
                 }
                 if (effect.type === 'GIANT') {
                     char.radius = char.baseRadius * 2;
-                    damageMult *= 1.5;
+                    damageMult *= 1.25; 
                 }
                 if (effect.type === 'GOLD_MODE') {
-                    damageMult *= 3;
-                    char.speed *= 2;
+                    damageMult *= 5; 
+                    char.speed *= 2.5; 
                     isShielded = true; 
                     isGold = true;
+                    if (state.time % 10 === 0) { // Regen
+                        char.hp = Math.min(char.maxHp, char.hp + 2);
+                        if(isPlayer) setP1Health(char.hp); else setP2Health(char.hp);
+                    }
                 }
                 if (effect.type === 'SHRINK') {
                     char.radius = char.baseRadius * 0.5; // Half size
@@ -662,28 +786,112 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                 }
                 if (effect.type === 'GT_OVERDRIVE') {
                     isGtMode = true;
-                    char.speed *= 1.5;
+                    char.speed *= 2.0; // UPDATED: 2x Speed
                     if (state.time % 5 === 0) { // Rainbow trail
                         createParticles(char.x, char.y, `hsl(${state.time % 360}, 100%, 50%)`, 2, 2);
                     }
                 }
+                if (effect.type === 'GRAVITY_WELL') {
+                    const opponent = isPlayer ? state.p2 : state.p1;
+                    const dx = char.x - opponent.x;
+                    const dy = char.y - opponent.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist > 0 && dist < 500) {
+                         const pull = 2000 / (dist * dist + 100); // Strong pull
+                         opponent.vx += (dx / dist) * pull;
+                         opponent.vy += (dy / dist) * pull;
+                    }
+                    // Contact damage
+                    if (dist < char.radius + opponent.radius) {
+                        opponent.hp -= 1; // rapid contact dmg
+                        if (isPlayer) setP2Health(opponent.hp); else setP1Health(opponent.hp);
+                    }
+                    // Visual
+                     if (state.time % 5 === 0) {
+                         state.particles.push({
+                            x: char.x + (Math.random()-0.5)*char.radius*2, 
+                            y: char.y + (Math.random()-0.5)*char.radius*2, 
+                            vx: (char.x - (char.x + (Math.random()-0.5)*char.radius*2)) * 0.1,
+                            vy: (char.y - (char.y + (Math.random()-0.5)*char.radius*2)) * 0.1,
+                            life: 20, color: '#c026d3', size: 2
+                        });
+                     }
+                }
+                if (effect.type === 'VOID_TRAP') {
+                    isVoidTrapped = true;
+                    isFrozen = true;
+                    // Heavy DoT
+                    if (state.time % 20 === 0) {
+                        char.hp -= 5;
+                        char.hitFlash = 5;
+                        if (isPlayer) setP1Health(char.hp); else setP2Health(char.hp);
+                    }
+                }
             }
-            if (isFrozen) char.speed *= 0.2; 
+            if (isFrozen) char.speed *= 0.1; // Freeze/Trap
             
-            return { damageMult, damageTakenMult, isShielded, isLovely, isGtMode };
+            return { damageMult, damageTakenMult, isShielded, isLovely, isGtMode, isGold, isVoidTrapped };
         };
 
         const p1Status = manageEffects(state.p1, true);
         const p2Status = manageEffects(state.p2, false);
 
-        // P1 Movement
-        let moveX = 0, moveY = 0;
-        if (state.keys.ArrowUp || state.keys.KeyW) moveY = -1;
-        if (state.keys.ArrowDown || state.keys.KeyS) moveY = 1;
-        if (state.keys.ArrowLeft || state.keys.KeyA) moveX = -1;
-        if (state.keys.ArrowRight || state.keys.KeyD) moveX = 1;
+        // --- Soni Body Collision Logic (Touch of Death) ---
+        // Check overlap
+        const dxBody = state.p1.x - state.p2.x;
+        const dyBody = state.p1.y - state.p2.y;
+        const distBody = Math.sqrt(dxBody*dxBody + dyBody*dyBody);
+        const minDist = state.p1.radius + state.p2.radius;
 
-        if (moveX !== 0 || moveY !== 0) {
+        if (distBody < minDist) {
+            // P1 touches P2
+            if (p1Status.isGold && state.p1.contactCooldown <= 0) {
+                const dmg = state.p2.maxHp * 0.5;
+                state.p2.hp -= dmg;
+                setP2Health(state.p2.hp);
+                state.p2.hitFlash = 20;
+                addFloatingText(state.p2.x, state.p2.y - 50, "-50% HP!", '#facc15', 'large');
+                state.p1.contactCooldown = 120; // 2 seconds cooldown
+                state.screenShake = 30;
+                playSound('hit');
+                // Knockback
+                state.p2.vx -= (dxBody/distBody) * 20;
+                state.p2.vy -= (dyBody/distBody) * 20;
+            }
+            // P2 touches P1
+            if (p2Status.isGold && state.p2.contactCooldown <= 0) {
+                const dmg = state.p1.maxHp * 0.5;
+                state.p1.hp -= dmg;
+                setP1Health(state.p1.hp);
+                state.p1.hitFlash = 20;
+                addFloatingText(state.p1.x, state.p1.y - 50, "-50% HP!", '#facc15', 'large');
+                state.p2.contactCooldown = 120;
+                state.screenShake = 30;
+                playSound('hit');
+                // Knockback
+                state.p1.vx += (dxBody/distBody) * 20;
+                state.p1.vy += (dyBody/distBody) * 20;
+            }
+        }
+
+        // --- P1 MOVEMENT (Host Controlled) ---
+        let moveX = 0, moveY = 0;
+        
+        if (joystickRef.current.active) {
+            moveX = joystickRef.current.dx / 40; 
+            moveY = joystickRef.current.dy / 40;
+        } else {
+            // Keyboard fallbacks
+            if (state.keys.ArrowUp || state.keys.KeyW) moveY = -1;
+            if (state.keys.ArrowDown || state.keys.KeyS) moveY = 1;
+            if (state.keys.ArrowLeft || state.keys.KeyA) moveX = -1;
+            if (state.keys.ArrowRight || state.keys.KeyD) moveX = 1;
+        }
+
+        if (Math.abs(moveX) > 1) moveX = Math.sign(moveX);
+        if (Math.abs(moveY) > 1) moveY = Math.sign(moveY);
+
+        if (!joystickRef.current.active && (moveX !== 0 || moveY !== 0)) {
             const len = Math.sqrt(moveX*moveX + moveY*moveY);
             if (len > 0) {
                 moveX /= len;
@@ -723,41 +931,57 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             }
             if (isNaN(angle)) angle = 0;
 
-            const vx = Math.cos(angle);
-            const vy = Math.sin(angle);
+            const baseVx = Math.cos(angle);
+            const baseVy = Math.sin(angle);
             const validVelocity = isNaN(bulletVelocity) ? 12 : bulletVelocity;
             
-            // Logic for GT Overdrive
-            if (p1Status.isGtMode) {
-                // Random special bullet logic
-                const rand = Math.random();
-                let bColor = '#ef4444';
-                let bType: 'FIRE' | 'ICE' | 'MANAN' = 'FIRE';
-                if (rand > 0.6) { bColor = '#06b6d4'; bType = 'ICE'; }
-                else if (rand > 0.3) { bColor = '#3b82f6'; bType = 'MANAN'; }
-                
-                state.bullets.push({
-                    x: state.p1.x + vx * state.p1.radius,
-                    y: state.p1.y + vy * state.p1.radius,
-                    vx: vx * validVelocity * 1.5, 
-                    vy: vy * validVelocity * 1.5,
-                    owner: 'p1',
-                    dmg: (15 + p1.stats.power) * p1Status.damageMult, // Heavy damage
-                    size: 25, 
-                    color: bColor,
-                    isSpecial: true,
-                    logicType: bType
-                });
+            // Logic for GT Overdrive (Shotgun Spread) OR SONI Mode (Uses same chaotic power)
+            if (p1Status.isGtMode || p1Status.isGold) {
+                // Fire 3 bullets in a spread
+                for (let i = -1; i <= 1; i++) {
+                     const spreadAngle = angle + (i * 0.2); // Spread arc
+                     const svx = Math.cos(spreadAngle);
+                     const svy = Math.sin(spreadAngle);
+                     
+                     // Random special bullet logic
+                    const rand = Math.random();
+                    let bColor = '#ef4444';
+                    let bType: 'FIRE' | 'ICE' | 'MANAN' | 'VOID' = 'FIRE';
+                    
+                    if (p1Status.isGold) {
+                        // Soni shoots black/gold void bullets mixed
+                         bColor = rand > 0.5 ? '#facc15' : '#000000';
+                         bType = rand > 0.5 ? 'FIRE' : 'VOID'; 
+                    } else {
+                        // GT Mode random
+                        if (rand > 0.6) { bColor = '#06b6d4'; bType = 'ICE'; }
+                        else if (rand > 0.3) { bColor = '#3b82f6'; bType = 'MANAN'; }
+                    }
+                    
+                    state.bullets.push({
+                        x: state.p1.x + svx * state.p1.radius,
+                        y: state.p1.y + svy * state.p1.radius,
+                        vx: svx * validVelocity * 1.5, 
+                        vy: svy * validVelocity * 1.5,
+                        owner: 'p1',
+                        dmg: (15 + p1.stats.power) * p1Status.damageMult, // Heavy damage
+                        size: 25, 
+                        color: bColor,
+                        isSpecial: true,
+                        logicType: bType
+                    });
+                }
                 state.p1.cooldown = 4; // Machine gun
             } else {
+                const bulletSize = 10;
                 state.bullets.push({
-                    x: state.p1.x + vx * state.p1.radius,
-                    y: state.p1.y + vy * state.p1.radius,
-                    vx: vx * validVelocity, 
-                    vy: vy * validVelocity,
+                    x: state.p1.x + baseVx * state.p1.radius,
+                    y: state.p1.y + baseVy * state.p1.radius,
+                    vx: baseVx * validVelocity, 
+                    vy: baseVy * validVelocity,
                     owner: 'p1',
                     dmg: (8 + (p1.stats.power * 0.8)) * p1Status.damageMult,
-                    size: 10, 
+                    size: bulletSize, 
                     color: '#a855f7',
                     img: state.bulletImg || undefined
                 });
@@ -770,21 +994,120 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
             fireSpecial(state.p1, 'p1', p1Status.damageMult);
         }
 
-        // P2 AI
-        const dx = state.p1.x - state.p2.x;
-        const dy = state.p1.y - state.p2.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist > 350) {
-            const angle = Math.atan2(dy, dx);
-            if (!isNaN(angle)) {
-                state.p2.vx += Math.cos(angle) * state.p2.speed * 0.1;
-                state.p2.vy += Math.sin(angle) * state.p2.speed * 0.1;
+        // --- P2 LOGIC (AI OR MULTIPLAYER REMOTE) ---
+        if (multiplayer && multiplayer.role === 'HOST') {
+            // Remote Control for P2
+            const rk = state.remoteKeys;
+            let rmX = 0, rmY = 0;
+            if (rk.joystick.active) {
+                rmX = rk.joystick.dx / 40;
+                rmY = rk.joystick.dy / 40;
+            } else {
+                if (rk.keys.ArrowUp || rk.keys.KeyW) rmY = -1;
+                if (rk.keys.ArrowDown || rk.keys.KeyS) rmY = 1;
+                if (rk.keys.ArrowLeft || rk.keys.KeyA) rmX = -1;
+                if (rk.keys.ArrowRight || rk.keys.KeyD) rmX = 1;
             }
+
+            if (Math.abs(rmX) > 1) rmX = Math.sign(rmX);
+            if (Math.abs(rmY) > 1) rmY = Math.sign(rmY);
+
+            state.p2.vx += rmX * state.p2.speed * 0.2;
+            state.p2.vy += rmY * state.p2.speed * 0.2;
+
+            // P2 Remote Shoot
+            if (state.p2.cooldown > 0) state.p2.cooldown--;
+            if (rk.keys.Space && state.p2.cooldown <= 0) {
+                 playSound('shoot');
+                 let angle = 0;
+                 if (rk.joystick.active) {
+                     angle = Math.atan2(rk.joystick.dy, rk.joystick.dx);
+                 } else {
+                     angle = Math.atan2(rk.mouse.y - state.p2.y, rk.mouse.x - state.p2.x);
+                 }
+                 if(isNaN(angle)) angle = 0;
+
+                 state.bullets.push({
+                    x: state.p2.x,
+                    y: state.p2.y,
+                    vx: Math.cos(angle) * 7,
+                    vy: Math.sin(angle) * 7,
+                    owner: 'p2',
+                    dmg: (8 + (p2.stats.power * 0.8)) * p2Status.damageMult,
+                    size: 8,
+                    color: '#ef4444'
+                 });
+                 state.p2.cooldown = 20;
+            }
+            // P2 Remote Special
+            if (rk.keys.KeyE && state.p2.specialCharge >= 100) {
+                fireSpecial(state.p2, 'p2', p2Status.damageMult);
+            }
+
         } else {
-            state.p2.vx += Math.sin(state.time * 0.05) * state.p2.speed * 0.15;
-            state.p2.vy += Math.cos(state.time * 0.03) * state.p2.speed * 0.15;
+            // AI Logic
+            const dx = state.p1.x - state.p2.x;
+            const dy = state.p1.y - state.p2.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Difficulty Logic
+            const aggression = difficulty >= 1.5 ? 1.5 : (difficulty <= 0.5 ? 0.7 : 1);
+            
+            if (dist > 350) {
+                const angle = Math.atan2(dy, dx);
+                if (!isNaN(angle)) {
+                    state.p2.vx += Math.cos(angle) * state.p2.speed * 0.1 * aggression;
+                    state.p2.vy += Math.sin(angle) * state.p2.speed * 0.1 * aggression;
+                }
+            } else {
+                state.p2.vx += Math.sin(state.time * 0.05) * state.p2.speed * 0.15 * aggression;
+                state.p2.vy += Math.cos(state.time * 0.03) * state.p2.speed * 0.15 * aggression;
+            }
+
+             // P2 AI Shooting
+            if (state.p2.cooldown > 0) state.p2.cooldown--;
+            else {
+                // Boss Damage Scaling
+                const bossDmg = (5 + (p2.stats.power * 0.6)) * p2Status.damageMult * difficulty;
+                const fireRate = difficulty >= 2.0 ? 20 : 35;
+
+                if (state.time % 250 < 120) {
+                    playSound('shoot');
+                    const angle = Math.atan2(state.p1.y - state.p2.y, state.p1.x - state.p2.x);
+                    state.bullets.push({
+                    x: state.p2.x,
+                    y: state.p2.y,
+                    vx: Math.cos(angle) * 7 * aggression,
+                    vy: Math.sin(angle) * 7 * aggression,
+                    owner: 'p2',
+                    dmg: bossDmg,
+                    size: 8,
+                    color: '#ef4444'
+                    });
+                    state.p2.cooldown = fireRate;
+                } else {
+                    playSound('shoot');
+                    for(let i=0; i<8; i++){
+                        const angle = (i / 8) * Math.PI * 2;
+                        state.bullets.push({
+                            x: state.p2.x,
+                            y: state.p2.y,
+                            vx: Math.cos(angle) * 5 * aggression, 
+                            vy: Math.sin(angle) * 5 * aggression,
+                            owner: 'p2',
+                            dmg: bossDmg * 0.8,
+                            size: 7,
+                            color: '#ef4444'
+                        });
+                    }
+                    state.p2.cooldown = difficulty >= 2 ? 60 : 90;
+                }
+            }
+
+            if (state.p2.specialCharge >= 100) fireSpecial(state.p2, 'p2', p2Status.damageMult);
         }
+        
+        // Physics apply for P2
         state.p2.vx *= 0.9;
         state.p2.vy *= 0.9;
         
@@ -792,45 +1115,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         if (!isNaN(state.p2.vy)) state.p2.y += state.p2.vy;
         state.p2.x = Math.max(state.p2.radius, Math.min(canvas.width - state.p2.radius, state.p2.x));
         state.p2.y = Math.max(state.p2.radius, Math.min(canvas.height - state.p2.radius, state.p2.y));
-
-        // P2 Shooting
-        if (state.p2.cooldown > 0) state.p2.cooldown--;
-        else {
-            const bossDmg = (5 + (p2.stats.power * 0.6)) * p2Status.damageMult;
-            if (state.time % 250 < 120) {
-                playSound('shoot');
-                const angle = Math.atan2(state.p1.y - state.p2.y, state.p1.x - state.p2.x);
-                state.bullets.push({
-                x: state.p2.x,
-                y: state.p2.y,
-                vx: Math.cos(angle) * 7,
-                vy: Math.sin(angle) * 7,
-                owner: 'p2',
-                dmg: bossDmg,
-                size: 8,
-                color: '#ef4444'
-                });
-                state.p2.cooldown = 35;
-            } else {
-                playSound('shoot');
-                for(let i=0; i<8; i++){
-                    const angle = (i / 8) * Math.PI * 2;
-                    state.bullets.push({
-                        x: state.p2.x,
-                        y: state.p2.y,
-                        vx: Math.cos(angle) * 5, 
-                        vy: Math.sin(angle) * 5,
-                        owner: 'p2',
-                        dmg: bossDmg * 0.8,
-                        size: 7,
-                        color: '#ef4444'
-                    });
-                }
-                state.p2.cooldown = 90;
-            }
-        }
-
-        if (state.p2.specialCharge >= 100) fireSpecial(state.p2, 'p2', p2Status.damageMult);
 
         // Update Bullets & Collisions
         updateBullets(canvas, state, p1Status, p2Status);
@@ -924,7 +1208,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                 if (b.isSpecial && b.logicType === 'MANAN') {
                     target.effects.push({ type: 'MANAN_CURSE', duration: 480 }); // 8s
                     addFloatingText(target.x, target.y - 70, "CURSED!", '#1e3a8a', 'large');
-                    playSound('freeze'); // Reuse weird sound
+                    playSound('freeze'); 
+                }
+                if (b.isSpecial && b.logicType === 'VOID') {
+                    target.effects.push({ type: 'VOID_TRAP', duration: 180 }); // 3s
+                    addFloatingText(target.x, target.y - 70, "VOID TRAP!", '#000000', 'large');
+                    playSound('void');
                 }
                 
                 const attacker = b.owner === 'p1' ? state.p1 : state.p2;
@@ -1061,7 +1350,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     });
 
     // Mouse Aim Indicator
-    if (!state.gameEnded && !isPausedRef.current && aimMode === 'MANUAL') {
+    // If Multiplayer Client, Mouse aim is irrelevant locally for drawing aiming line to P1, but we still capture it.
+    const isClient = multiplayer && multiplayer.role === 'CLIENT';
+    const currentPlayerX = isClient ? state.p2.x : state.p1.x;
+    const currentPlayerY = isClient ? state.p2.y : state.p1.y;
+
+    if (!state.gameEnded && !isPausedRef.current && aimMode === 'MANUAL' && !('ontouchstart' in window)) {
         ctx.strokeStyle = 'rgba(168, 85, 247, 0.5)';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -1074,7 +1368,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         
         ctx.beginPath();
         ctx.setLineDash([5, 5]);
-        ctx.moveTo(state.p1.x, state.p1.y);
+        ctx.moveTo(currentPlayerX, currentPlayerY);
         ctx.lineTo(state.mouse.x, state.mouse.y);
         ctx.stroke();
         ctx.setLineDash([]);
@@ -1177,6 +1471,33 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         ctx.shadowBlur = 0;
     });
 
+    // --- Virtual Joystick / Controls (Only Touch) ---
+    // Simple detection, could be improved with prop
+    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
+    if (isTouch && !state.gameEnded && !isPausedRef.current) {
+        // Joystick Base
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const joyBaseX = 100;
+        const joyBaseY = canvas.height - 100;
+        ctx.arc(joyBaseX, joyBaseY, 50, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Joystick Stick
+        ctx.fillStyle = 'rgba(168, 85, 247, 0.5)';
+        ctx.beginPath();
+        const stickX = joyBaseX + joystickRef.current.dx;
+        const stickY = joyBaseY + joystickRef.current.dy;
+        ctx.arc(stickX, stickY, 25, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Buttons are HTML overlay mostly, but drawing hints here if needed
+    }
+
     ctx.restore();
   };
 
@@ -1199,6 +1520,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     const isLovely = char.effects.some((e: ActiveEffect) => e.type === 'LOVELY');
     const isCursed = char.effects.some((e: ActiveEffect) => e.type === 'MANAN_CURSE');
     const isGtMode = char.effects.some((e: ActiveEffect) => e.type === 'GT_OVERDRIVE');
+    const isVoidTrapped = char.effects.some((e: ActiveEffect) => e.type === 'VOID_TRAP');
 
     if (hasSpeed) glowColor = '#3b82f6';
     if (hasPower) glowColor = '#ef4444';
@@ -1208,6 +1530,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     if (isLovely) glowColor = '#f472b6';
     if (isCursed) glowColor = '#1e3a8a';
     if (isGtMode) glowColor = `hsl(${time % 360}, 100%, 60%)`;
+    if (isVoidTrapped) glowColor = '#000000';
 
     ctx.translate(char.x, char.y);
 
@@ -1291,6 +1614,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
                 ctx.fillRect(-char.radius, -char.radius, char.radius * 2, char.radius * 2);
                 ctx.globalCompositeOperation = 'source-over';
             }
+             if (isVoidTrapped) {
+                // Silhouette
+                ctx.globalCompositeOperation = 'source-atop';
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(-char.radius, -char.radius, char.radius * 2, char.radius * 2);
+            }
         } catch(e) {
             ctx.fillStyle = glowColor;
             ctx.fill();
@@ -1323,6 +1652,68 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
     ctx.restore(); // Restore translate
     ctx.globalAlpha = 1;
   };
+
+  // --- Touch Handlers ---
+  const handleTouchStart = (e: React.TouchEvent) => {
+      const touch = e.changedTouches[0];
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      
+      const joyBaseX = 100;
+      const joyBaseY = 600 - 100; // Assuming fixed height for simplicity in scaling
+      
+      const dist = Math.sqrt((x - joyBaseX)**2 + (y - joyBaseY)**2);
+      if (dist < 80) {
+          joystickRef.current.active = true;
+          joystickRef.current.startX = x;
+          joystickRef.current.startY = y;
+      }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+      if (!joystickRef.current.active) return;
+      const touch = e.changedTouches[0];
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      
+      // Need to scale coords if canvas is responsive
+      // For now assume logic coordinates roughly map or use center diff
+      
+      // Calculate delta from virtual base (100, 500) logic coords
+      // To get this right with responsive canvas, we need scaling factor:
+      const scaleX = 800 / rect.width;
+      const scaleY = 600 / rect.height;
+      
+      const logicX = (touch.clientX - rect.left) * scaleX;
+      const logicY = (touch.clientY - rect.top) * scaleY;
+      
+      let dx = logicX - 100;
+      let dy = logicY - 500;
+      
+      // Clamp
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist > 50) {
+          dx = (dx / dist) * 50;
+          dy = (dy / dist) * 50;
+      }
+      
+      joystickRef.current.dx = dx;
+      joystickRef.current.dy = dy;
+  };
+
+  const handleTouchEnd = () => {
+      joystickRef.current.active = false;
+      joystickRef.current.dx = 0;
+      joystickRef.current.dy = 0;
+  };
+
+  // Check if device is touch
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-screen bg-slate-900 overflow-hidden relative cursor-crosshair">
@@ -1372,6 +1763,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         onClick={togglePause}
         className="absolute top-4 right-1/2 translate-x-1/2 z-30 bg-slate-800/80 text-white p-2 rounded-full hover:bg-slate-700 border border-slate-600 transition-all"
         title="Pause (ESC)"
+        disabled={multiplayer && multiplayer.role === 'CLIENT'}
       >
         {isPaused ? (
             <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -1380,26 +1772,47 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ p1, p2, customBullet, on
         )}
       </button>
 
-      {/* Special Button (Mobile) */}
-      {p1Special >= 100 && !isPaused && (
-          <button 
-            className="absolute bottom-24 right-8 z-30 w-24 h-24 bg-orange-500 rounded-full border-4 border-yellow-300 shadow-[0_0_30px_rgba(249,115,22,0.6)] animate-bounce flex items-center justify-center text-white font-black text-xl tracking-tighter"
-            onClick={() => {
-                if (gameState.current.p1.specialCharge >= 100) {
-                     gameState.current.keys.KeyE = true;
-                     setTimeout(() => gameState.current.keys.KeyE = false, 100);
-                }
-            }}
-          >
-              {p1.stats.specialMove.length > 8 ? 'ULTIMATE' : p1.stats.specialMove}
-          </button>
+      {/* Touch Controls Overlay */}
+      {isTouchDevice && !isPaused && (
+        <>
+            {/* Shoot Button */}
+            <button
+                className="absolute bottom-8 right-8 z-30 w-20 h-20 bg-red-600 rounded-full border-4 border-red-400 opacity-80 active:scale-95 flex items-center justify-center"
+                onTouchStart={(e) => { e.preventDefault(); gameState.current.keys.Space = true; }}
+                onTouchEnd={(e) => { e.preventDefault(); gameState.current.keys.Space = false; }}
+            >
+                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            </button>
+
+            {/* Special Button */}
+            {(multiplayer && multiplayer.role === 'CLIENT' ? p2Special : p1Special) >= 100 && (
+                <button
+                    className="absolute bottom-32 right-12 z-30 w-16 h-16 bg-yellow-500 rounded-full border-4 border-yellow-300 shadow-[0_0_20px_rgba(234,179,8,0.6)] animate-pulse flex items-center justify-center"
+                    onClick={() => {
+                        gameState.current.keys.KeyE = true;
+                        setTimeout(() => gameState.current.keys.KeyE = false, 100);
+                    }}
+                >
+                     <span className="text-white font-black text-xl">E</span>
+                </button>
+            )}
+        </>
       )}
 
-      <div className="absolute bottom-8 text-white/30 text-sm font-mono z-10 bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm pointer-events-none">
-        WASD to Move | <span className="text-white font-bold">{aimMode === 'AUTO' ? 'AUTO-AIM Active' : 'MOUSE to Aim'} & SPACE to Shoot</span> | <span className="text-orange-400 font-bold">E for {p1.stats.specialMove}</span>
-      </div>
+      {/* Desktop Hint */}
+      {!isTouchDevice && (
+        <div className="absolute bottom-8 text-white/30 text-sm font-mono z-10 bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm pointer-events-none">
+            WASD to Move | <span className="text-white font-bold">{aimMode === 'AUTO' ? 'AUTO-AIM Active' : 'MOUSE to Aim'} & SPACE to Shoot</span> | <span className="text-orange-400 font-bold">E for Special</span>
+        </div>
+      )}
 
-      <canvas ref={canvasRef} className="game-canvas rounded-xl shadow-2xl border border-slate-700 bg-black max-w-full max-h-full" />
+      <canvas 
+        ref={canvasRef} 
+        className="game-canvas rounded-xl shadow-2xl border border-slate-700 bg-black max-w-full max-h-full touch-none" 
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      />
     </div>
   );
 };
