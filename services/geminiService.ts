@@ -49,14 +49,17 @@ export async function analyzeFighters(
   });
 
   try {
-    if (!process.env.API_KEY) {
+    // Robust check for API key availability that works in browser environments
+    const apiKey = typeof process !== 'undefined' && process.env ? process.env.API_KEY : undefined;
+
+    if (!apiKey) {
         console.warn("API_KEY is missing. Using fallback stats.");
         // Simulate network delay
         await new Promise(resolve => setTimeout(resolve, 1500));
         return getFallbackStats();
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: {
