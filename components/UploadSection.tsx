@@ -23,10 +23,10 @@ interface UploadSectionProps {
 }
 
 // Updated SVG for Kunal (Pink Shirt, Glasses, Happy)
-const DEFAULT_AVATAR_P1 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIj4KICA8cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2ZiY2ZlOCIvPgogIDxjaXJjbGUgY3g9IjEwMCIgY3k9IjkwIiByPSI1MCIgZmlsbD0iI2Y4ZDdkYSIvPgogIDxwYXRoIGQ9Ik01MCAyMDAgUTEwMCAyMDAgMTUwIDIwMCBMMTUwIDE2MCBRMTAwIDE4MCA1MCAxNjAgWiIgZmlsbD0iI2Y0NzJiNiIvPgogIDxyZWN0IHg9IjcwIiB5PSI4MCIgd2lkdGg9IjI1IiBoZWlnaHQ9IjE1IiByeD0iNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgPHJlY3QgeD0iMTA1IiB5PSI4MCIgd2lkdGg9IjI1IiBoZWlnaHQ9IjE1IiByeD0iNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgPGxpbmUgeDE9Ijk1IiB5MT0iODciIHgyPSIxMDUiIHkyPSI4NyIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHBhdGggZD0iTTg1IDExMCBRMTAwIDEzMCAxMTUgMTEwIiBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjMiLz4KPC9zdmc+";
+const DEFAULT_AVATAR_P1 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIj4KICA8IS0tIEJhY2tncm91bmQgLS0+CiAgPHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNmYmNmZTgiLz4KICA8IS0tIFNoaXJ0IChQaW5rKSAtLT4KICA8cGF0aCBkPSJNNDAgMjAwIEw0MCAxNjAgUTEwMCAxMzAgMTYwIDE2MCBMMTYwIDIwMCBaIiBmaWxsPSIjZjQ3MmI2Ii8+CiAgPCEtLSBOZWNrIC0tPgogIDxwYXRoIGQ9Ik03NSAxNjAgUTEwMCAxODAgMTI1IDE2MCIgZmlsbD0iI2Y4ZDdkYSIvPgogIDwhLS0gSGVhZCAtLT4KICA8Y2lyY2xlIGN4PSIxMDAiIGN5PSI5MCIgcj0iNTAiIGZpbGw9IiNmOGQ3ZGEiLz4KICA8IS0tIEhhaXIgLS0+CiAgPHBhdGggZD0iTTUwIDkwIFE1MCA0MCAxMDAgNDAgUTE1MCA0MCAxNTAgOTAgUTE1MCA2MCAxMDAgNjAgQTUwIDYwIDAgMCAwIDUwIDkwIiBmaWxsPSIjMmMwYTA2Ii8+CiAgPCEtLSBHbGFzc2VzIC0tPgogIDxyZWN0IHg9IjcwIiB5PSI4MCIgd2lkdGg9IjI1IiBoZWlnaHQ9IjE1IiByeD0iNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgPHJlY3QgeD0iMTA1IiB5PSI4MCIgd2lkdGg9IjI1IiBoZWlnaHQ9IjE1IiByeD0iNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgPGxpbmUgeDE9Ijk1IiB5MT0iODciIHgyPSIxMDUiIHkyPSI4NyIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPCEtLSBTbWlsZSAtLT4KICA8cGF0aCBkPSJNODUgMTEwIFExMDAgMTMwIDExNSAxMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMyIvPgo8L3N2Zz4=";
 
-// Updated SVG for GT (Dark Green/Black Shirt, Glasses, Serious)
-const DEFAULT_AVATAR_P2 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIj4KICA8cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzAyMmMyMiIvPgogIDxjaXJjbGUgY3g9IjEwMCIgY3k9IjkwIiByPSI1MCIgZmlsbD0iI2UyYzRiMCIvPgogIDxwYXRoIGQ9Ik00MCAyMDAgTDE2MCAyMDAgTDE2MCAxNjAgUTEwMCAxNDAgNDAgMTYwIFoiIGZpbGw9IiMwZjE3MmEiLz4KICA8Y2lyY2xlIGN4PSI4MCIgY3k9Ijg1IiByPSIxMiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNGI1NTYzIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8Y2lyY2xlIGN4PSIxMjAiIGN5PSI4NSIgcj0iMTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzRiNTU2MyIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPGxpbmUgeDE9IjkyIiB5MT0iODUiIHgyPSIxMDgiIHkyPSI4NSIgc3Ryb2tlPSIjNGI1NTYzIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8bGluZSB4MT0iOTAiIHkxPSIxMjAiIHgyPSIxMTAiIHkyPSIxMjAiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIvPgo8L3N2Zz4=";
+// Updated SVG for GT (Dark Green Shirt, Glasses, Serious)
+const DEFAULT_AVATAR_P2 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIj4KICA8IS0tIEJhY2tncm91bmQgLS0+CiAgPHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiMwMjJjMjIiLz4KICA8IS0tIFNoaXJ0IChEYXJrIEdyZWVuKSAtLT4KICA8cGF0aCBkPSJNNDAgMjAwIEw0MCAxNjAgUTEwMCAxMzAgMTYwIDE2MCBMMTYwIDIwMCBaIiBmaWxsPSIjMDY0ZTNYiLz4KICA8IS0tIE5lY2sgLS0+CiAgPHBhdGggZD0iTTc1IDE2MCBRMTAwIDE4MCAxMjUgMTYwIiBmaWxsPSIjZTJjNGIwIi8+CiAgPCEtLSBIZWFkIC0tPgogIDxjaXJjbGUgY3g9IjEwMCIgY3k9IjkwIiByPSI1MCIgZmlsbD0iI2UyYzRiMCIvPgogIDwhLS0gSGFpciAtLT4KICA8cGF0aCBkPSJNNDUgOTAgUTUwIDMwIDEwMCAzMCBRMTUwIDMwIDE1NSA5MCBRMTUwIDUwIDEwMCA1MCBRNTAgNTAgNDUgOTA2IiBmaWxsPSIjMTAxMDEwIi8+CiAgPCEtLSBHbGFzc2VzIC0tPgogIDxjaXJjbGUgY3g9IjgwIiBjeT0iODUiIHI9IjEyIiBmaWxsPSJub25lIiBzdHJva2U9IiMzNzQxNTEiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjEyMCIgY3k9Ijg1IiByPSIxMiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMzc0MTUxIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8bGluZSB4MT0iOTIiIHkxPSI4NSIgeDI9IjEwOCIgeTI9Ijg1IiBzdHJva2U9IiMzNzQxNTEiIHN0cm9rZS13aWR0aD0iMiIvPgogIDwhLS0gU2VyaW91cyBNb3V0aCAtLT4KICA8bGluZSB4MT0iOTAiIHkxPSIxMjAiIHgyPSIxMTAiIHkyPSIxMjAiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIvPgo8L3N2Zz4=";
 
 const POWER_OPTIONS: {id: SpecialId, label: string, desc: string}[] = [
     { id: 'GMASTI', label: 'Gmasti (Fireball)', desc: 'Shoots a massive fireball. Simple, high damage.' },
@@ -38,7 +38,7 @@ const POWER_OPTIONS: {id: SpecialId, label: string, desc: string}[] = [
     { id: 'PAL', label: 'Pal (Lovely)', desc: 'Peace Mode. No damage dealt. Both players Heal.' },
     { id: 'MANAN', label: 'Manan (Curse)', desc: 'Beam Attack. Curses Enemy (-10HP/s). You Shrink.' },
     { id: 'ABHAY', label: 'Abhay (Magnet)', desc: 'Gravity Well: Pulls opponent in & deals contact dmg.' },
-    { id: 'GT_MODE', label: 'GT Mode (Ultimate)', desc: 'NO COST! 3-Way Spread Shot + God Speed + Random Buffs.' },
+    { id: 'GT_MODE', label: 'GT Mode (Ultimate)', desc: 'UNLOCKED! No Cost. 3-Way Spread + Speed + Random Chaos.' },
 ];
 
 export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onMultiplayerRequest }) => {
@@ -104,10 +104,6 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onM
           newSet.add(type);
       }
       setSelectedPowerUps(newSet);
-  };
-
-  const handleStart = () => {
-    // This function is effectively replaced by the button clicks calling onImagesReady directly or via wrapper
   };
 
   const handleStartWithDifficulty = () => {
@@ -178,7 +174,7 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onM
             </div>
             {!img1 && (
                 <button onClick={handleDefaultP1} className="text-xs text-purple-400 hover:text-purple-300 underline uppercase tracking-wide -mt-2">
-                    Use Default: Kunal
+                    Use Default: Kunal (Pink Shirt)
                 </button>
             )}
             <div className="flex flex-col gap-3 p-3 bg-slate-900/50 rounded-lg border border-slate-800">
@@ -199,7 +195,6 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onM
                         value={p1SpecialId} 
                         onChange={(e) => {
                             setP1SpecialId(e.target.value as SpecialId);
-                            // Auto update name if still default
                             const opt = POWER_OPTIONS.find(o => o.id === e.target.value);
                             if(opt) setP1SpecialName(opt.label.split(' (')[0]);
                         }}
@@ -383,7 +378,7 @@ export const UploadSection: React.FC<UploadSectionProps> = ({ onImagesReady, onM
             </div>
              {!img2 && (
                 <button onClick={handleDefaultP2} className="text-xs text-indigo-400 hover:text-indigo-300 underline uppercase tracking-wide -mt-2">
-                    Use Default: GT
+                    Use Default: GT (Dark Shirt)
                 </button>
             )}
              <div className="flex flex-col gap-3 p-3 bg-slate-900/50 rounded-lg border border-slate-800">
